@@ -166,6 +166,7 @@ require (
 	github.com/solarwinds/solarwinds-otel-collector/pkg/version v0.119.5
 	github.com/solarwinds/solarwinds-otel-collector/processor/k8seventgenerationprocessor v0.119.5
 	github.com/solarwinds/solarwinds-otel-collector/receiver/swohostmetricsreceiver v0.119.5
+	github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver v0.0.0-00010101000000-000000000000
 	github.com/solarwinds/solarwinds-otel-collector/receiver/swok8sobjectsreceiver v0.119.5
 	github.com/spf13/cobra v1.8.1
 	go.opentelemetry.io/collector/component v0.119.0
@@ -741,6 +742,8 @@ replace github.com/solarwinds/solarwinds-otel-collector/receiver/swohostmetricsr
 replace github.com/solarwinds/solarwinds-otel-collector/processor/k8seventgenerationprocessor => ../../processor/k8seventgenerationprocessor
 
 replace github.com/solarwinds/solarwinds-otel-collector/receiver/swok8sobjectsreceiver => ../../receiver/swok8sobjectsreceiver
+
+replace github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver => ../../receiver/swojobenginereceiver
 
 replace github.com/solarwinds/solarwinds-otel-collector/internal/k8sconfig => ../../internal/k8sconfig
 

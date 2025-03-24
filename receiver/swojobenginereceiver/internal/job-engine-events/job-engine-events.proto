@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package solarwinds.jobengine.protos;
+
+import "google/protobuf/timestamp.proto"; // DateTime or DateTimeOffset
+
+option csharp_namespace = "SolarWinds.JobEngine.Protos";
+option go_package = "./job-engine-events";
+
+// Migration of JobSchedulerEvents from orion\src\libs\src\SolarWinds.JobEngine\SolarWinds.JobEngine.Contract\IJobSchedulerEvents.cs
+service JobEngineEvents {
+    rpc NotifyJobFinished(NotifyJobFinishedRequest) returns (NotifyJobFinishedResponse) {}
+    rpc NotifyJobProgress(NotifyJobProgressRequest) returns (NotifyJobProgressResponse) {}
+}
+
+message NotifyJobFinishedRequest {
+    repeated FinishedJobInfo finished_jobs = 1;
+}
+
+message NotifyJobProgressRequest {
+}
+
+message NotifyJobFinishedResponse {
+    
+}
+
+message NotifyJobProgressResponse {
+    
+}
+
+message FinishedJobInfo {
+    string scheduled_job_id = 1;
+    google.protobuf.Timestamp last_execution = 2;
+    string state = 3;
+    JobResultInfo result = 4;
+    bool is_custom_debug_enabled = 5;
+}
+
+message JobResultInfo {
+    string job_id = 1;
+    JobState job_state = 2;
+    bytes output = 3;
+    string error = 4;
+    bool read_only = 5;
+    bool streamed_result = 6;
+    string progress = 7;
+    ResultContent content = 8;
+}
+
+enum JobState {
+    Created = 0;
+    Queued = 1;
+    Running = 2;
+    Canceling = 3;
+    Canceled = 4;
+    Failed = 5;
+    Finished = 6;
+    Unknown = 7;
+}
+
+enum ResultContent
+{
+    Heartbeat = 0;
+    FinalResult = 1;
+    Progress = 2;
+    PartialResult = 3;
+}
