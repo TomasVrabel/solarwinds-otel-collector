@@ -1,16 +1,21 @@
 package model
 
 import (
+	"encoding/json"
+	"strconv"
 	"time"
 
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver/internal/job-engine-events"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.uber.org/zap"
 )
 
-func appendMeasuremnt(metricName string, metricValue string, value float64, scopeMetrics pmetric.MetricSlice) {
+func appendMeasuremnt(metricName string, metricValue string, metricDesc string, value float64, scopeMetrics pmetric.MetricSlice) {
 	rttMetric := scopeMetrics.AppendEmpty()
 	rttMetric.SetName(metricName)
 	rttMetric.SetUnit(metricValue)
+	rttMetric.SetDescription(metricDesc)
 	rttMetricDataPoints := rttMetric.SetEmptyGauge().DataPoints()
 
 	appendDataPoint(rttMetricDataPoints, value)
@@ -21,4 +26,65 @@ func appendDataPoint(metricDataPoints pmetric.NumberDataPointSlice, value float6
 	dp.SetDoubleValue(value)
 	dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 	//dp.Attributes().PutStr(ATTR_PEER_IP, "10.10.10.10")
+}
+
+func formatUri(entityType string, entityId int) string {
+	return entityType + ":" + strconv.Itoa(entityId)
+}
+
+func createTransformFunc[T any](processFunc func(*pmetric.ResourceMetrics, *T, *PollerAssignment) error) func([]byte, *pmetric.ResourceMetrics, *PollerAssignment) error {
+	return func(pollerResultData []byte, rm *pmetric.ResourceMetrics, assignment *PollerAssignment) error {
+		var pollerResult T
+		if err := json.Unmarshal(pollerResultData, &pollerResult); err != nil {
+			return err
+		}
+		return processFunc(rm, &pollerResult, assignment)
+	}
+}
+
+var transformMap = map[string]func([]byte, *pmetric.ResourceMetrics, *PollerAssignment) error{
+	"MultiCoreCpuLoadResult":          createTransformFunc(addResult_CPU),
+	"CiscoMemoryResult":               createTransformFunc(addResult_Memory),
+	"NodeDetailsResult":               createTransformFunc(addResult_CoreInventory),
+	"DeclarativePollerResultBase":     createTransformFunc(addResult_PCU),
+	"NodeStatusAndResponseTimeResult": createTransformFunc(addResult_Echo),
+}
+
+func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *zap.Logger) (*pmetric.Metrics, error) {
+	metrics := pmetric.NewMetrics()
+
+	for _, job := range in.FinishedJobs {
+		var outputStr = job.GetResult().GetOutput()
+
+		var root PollerJobOutput
+		err := json.Unmarshal([]byte(outputStr), &root)
+		if err != nil {
+			message := "Error deserializing JSON"
+			logger.Error(message, zap.Error(err))
+
+			return nil, err
+		}
+
+		for _, result := range root.Results {
+			// Add a ResourceMetrics to the Metrics object
+			rm := metrics.ResourceMetrics().AppendEmpty()
+
+			transformFunction := transformMap[result.ResultType]
+
+			if transformFunction == nil {
+				message := "unknown result type"
+				logger.Error(message, zap.String("ResultType", result.ResultType), zap.Error(err))
+				continue
+			}
+
+			err = transformFunction(result.PollerResult, &rm, &result.PollerAssignment)
+
+			if err != nil {
+				message := "Error processing PollerResult"
+				logger.Error(message, zap.String("ResultType", result.ResultType), zap.Error(err))
+				continue
+			}
+		}
+	}
+	return &metrics, nil
 }

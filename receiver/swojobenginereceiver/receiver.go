@@ -22,6 +22,7 @@ type jobengineGRPCReceiver struct {
 	nextConsumer consumer.Metrics
 	settings     receiver.Settings
 	serverGRPC   *grpc.Server
+	server       *server
 
 	obsrepGRPC *receiverhelper.ObsReport
 }
@@ -30,18 +31,25 @@ type jobengineGRPCReceiver struct {
 type server struct {
 	nextConsumer consumer.Metrics
 	obsrep       *receiverhelper.ObsReport
+	logger       *zap.Logger
 
 	jobEngineEvents.UnimplementedJobEngineEventsServer
 }
 
 // OnJobFinished implements jobEngineEvents.OnJobFinished
 func (s *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.NotifyJobFinishedRequest) (*jobEngineEvents.NotifyJobFinishedResponse, error) {
+	metrics, err := model.Transform_toMetrics(in, s.logger)
+
+	if err != nil {
+		message := "Failed to transform metrics."
+		s.logger.Error(message, zap.Error(err))
+
+		return &jobEngineEvents.NotifyJobFinishedResponse{}, nil
+	}
 
 	ctx := s.obsrep.StartMetricsOp(context.Background())
-	metrics, err := model.Transform_PCU_toMetrics(in)
-	metricsRecordCount := 1
 	err = s.nextConsumer.ConsumeMetrics(ctx, *metrics)
-	s.obsrep.EndMetricsOp(ctx, "protobuf", metricsRecordCount, err)
+	s.obsrep.EndMetricsOp(ctx, "protobuf", metrics.DataPointCount(), err)
 
 	return &jobEngineEvents.NotifyJobFinishedResponse{}, nil
 }
@@ -54,10 +62,13 @@ func (r *jobengineGRPCReceiver) Start(ctx context.Context, host component.Host) 
 		return fmt.Errorf("failed create grpc server error: %w", err)
 	}
 
-	jobEngineEvents.RegisterJobEngineEventsServer(r.serverGRPC, &server{
+	r.server = &server{
 		nextConsumer: r.nextConsumer,
 		obsrep:       r.obsrepGRPC,
-	})
+		logger:       r.settings.Logger,
+	}
+
+	jobEngineEvents.RegisterJobEngineEventsServer(r.serverGRPC, r.server)
 
 	err = r.startGRPCServer(ctx, host)
 	if err != nil {
