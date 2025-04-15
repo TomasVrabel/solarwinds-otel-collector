@@ -1,0 +1,230 @@
+syntax = "proto3";
+
+package solarwinds.jobengine.protos;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/duration.proto"; // TimeSpan
+import "google/protobuf/timestamp.proto"; // DateTime or DateTimeOffset
+
+option csharp_namespace = "SolarWinds.JobEngine.Protos";
+option go_package = "./job-engine-service";
+
+// Migration of IJobScheduler from orion/src/libs/src/SolarWinds.JobEngine/SolarWinds.JobEngine.Contract
+// [TODO] We can refactor this single service to multiple services later. There are 3 visible areas Jobs, execution engines and policies.
+// Also with our approach of executing jobs on JE, some rpc methods might be removed or adjusted.
+service JobEngine {
+    rpc AddJob (ScheduledJob) returns (UuidType) {}
+    rpc UpdateJob (UpdateJobRequest) returns (google.protobuf.Empty) {}
+    rpc RemoveJob (UuidType) returns (google.protobuf.Empty) {}
+    rpc RemoveJobs (RemoveJobsRequest) returns (google.protobuf.Empty) {}
+    rpc CancelJob (UuidType) returns (google.protobuf.Empty) {}
+    rpc EnumerateScheduledJobs (google.protobuf.Empty) returns (EnumerateScheduledJobsResponse) {}
+    rpc GetJobResultStream (GetJobResultStreamRequest) returns (stream JobResult) {}
+    rpc DeleteJobResult (UuidType) returns (google.protobuf.Empty) {}
+
+    rpc Clear (ClearRequest) returns (google.protobuf.Empty) {}
+    rpc GetPublicKey (google.protobuf.Empty) returns (GetPublicKeyResponse) {}
+
+    rpc AddExecutionEngine (AddExecutionEngineRequest) returns (google.protobuf.Empty) {}
+    rpc RemoveExecutionEngine (UriType) returns (google.protobuf.Empty) {}
+    rpc SuspendExecutionEngine (UriType) returns (google.protobuf.Empty) {}
+    rpc ResumeExecutionEngine (UriType) returns (google.protobuf.Empty) {}
+    rpc EnumerateExecutionEngines (google.protobuf.Empty) returns (EnumerateExecutionEnginesResponse) {}
+    rpc ExecutionEngineExists (UriType) returns (ExistsResponse) {}
+
+    rpc AddPolicy (XmlElementType) returns (google.protobuf.Empty) {}
+    rpc UpdatePolicy (XmlElementType) returns (google.protobuf.Empty) {}
+    rpc RemovePolicy (PolicyIdRequest) returns (google.protobuf.Empty) {}
+    rpc EnumeratePolicies (google.protobuf.Empty) returns (EnumeratePoliciesResponse) {}
+    rpc PolicyExists (PolicyIdRequest) returns (ExistsResponse) {}
+}
+
+message RemoveJobsRequest {
+    repeated UuidType ids = 1;
+}
+
+message UpdateJobRequest {
+    UuidType id = 1;
+    ScheduledJob job = 2;
+    bool execute_immediately = 3;
+}
+
+message ClearRequest {
+    repeated string product_namespaces = 1;
+}
+
+message EnumerateScheduledJobsResponse {
+    repeated ScheduledJobInfo scheduled_jobs = 1;
+}
+
+message AddExecutionEngineRequest {
+    UriType execution_engine_uri = 1;
+    bool enabled = 2;
+}
+
+message EnumerateExecutionEnginesResponse {
+    repeated ExecutionEngineInfo execution_engines = 1;
+}
+
+message PolicyIdRequest {
+    string policy_id = 1;
+}
+
+message EnumeratePoliciesResponse {
+    repeated XmlElementType policies = 1;
+}
+
+message GetJobResultStreamRequest {
+    UuidType job_id = 1;
+    string stream_name = 2;
+}
+
+message ExistsResponse {
+    bool exists = 1;
+}
+
+message GetPublicKeyResponse {
+    string public_key = 1;
+}
+
+// [TODO] Find out what type returns GetJobResultStream
+message JobResult {
+    UuidType id = 1;
+}
+
+message ScheduledJob {
+    google.protobuf.Duration frequency = 1;
+    // Indicates if this job is for single execute (IsOneShot=true) or for schedule
+    bool is_one_shot = 2;
+    // RunOnce job is basically scheduled OneShot job.
+    optional bool run_once = 3;
+    optional bool force_use_initial_wait = 4;
+    optional google.protobuf.Duration initial_wait = 5;
+    JobDescription job = 6;
+    string notification_address = 7;
+    // http://www.raboof.com
+    // Crontab expression format:
+    // * * * * *
+    // - - - - -
+    // | | | | |
+    // | | | | +----- day of week (0 - 6) (Sunday=0)
+    // | | | +------- month (1 - 12)
+    // | | +--------- day of month (1 - 31)
+    // | +----------- hour (0 - 23)
+    // +------------- min (0 - 59)
+    //
+    // Star (*) in the value field above means all legal values as in
+    // braces for that column. The value column can have a * or a list
+    // of elements separated by commas. An element is either a number in
+    // the ranges shown above or two numbers in the range separated by a
+    // hyphen (meaning an inclusive range).
+    //
+    // http://en.wikipedia.org/wiki/Vixie_cron#crontab_syntax
+    optional string cron_expression = 8;
+    string state = 9;
+    optional TimeZoneInfoType time_zone = 10;
+    // Define start-up condition when job will be valid for scheduling.
+    optional google.protobuf.Timestamp start = 11;
+    // Define end condition when job will be removed from scheduling.
+    optional google.protobuf.Timestamp end = 12;
+}
+
+message JobDescription {
+    string job_namespace = 1;
+    string job_type = 2;
+    google.protobuf.Duration timeout = 3;
+    google.protobuf.Duration result_ttl = 4;
+    bool run_as = 5;
+    Credential credential = 6;
+    HostAddress host_address = 7;
+    optional string legacy_engine = 8;
+    optional JobPriorityType priority = 9;
+    string job_configuration = 10;
+    bytes compressed_job_configuration = 11;
+    optional bool use_64_bit = 12;
+    optional float job_weight = 13;
+    optional string throttle_group = 14;
+    string endpoint_address = 15;
+    optional WorkerType worker_type = 16;
+    optional string custom_worker_command_line = 17;
+    optional string custom_worker_command_args = 18;
+    optional PackageType supported_roles = 19;
+    optional google.protobuf.Duration hung_timeout = 20;
+    optional bool is_custom_debug_log_enabled = 21;
+}
+
+message Credential {
+    string credential_type = 1;
+    XmlElementType data = 2;
+}
+
+message HostAddress {
+    string address = 1;
+    AddressType address_type = 2;
+}
+
+enum AddressType {
+    ADDRESS_TYPE_UNSPECIFIED = 0;
+    ADDRESS_TYPE_DNS_HOST_NAME = 1;
+    ADDRESS_TYPE_DNS_FULLY_QUALIFIED = 2;
+    ADDRESS_TYPE_NET_BIOS_COMPUTER_NAME = 3;
+    ADDRESS_TYPE_IPV4 = 4;
+    ADDRESS_TYPE_IPV6 = 5;
+}
+
+enum JobPriorityType {
+    JOB_PRIORITY_UNSPECIFIED = 0;
+    JOB_PRIORITY_NORMAL = 1;
+    JOB_PRIORITY_HIGH = 2;
+}
+
+enum WorkerType {
+    WORKER_TYPE_UNSPECIFIED = 0;
+    WORKER_TYPE_NATIVE = 1;
+    WORKER_TYPE_CUSTOM = 2;
+}
+
+enum PackageType {
+    PACKAGE_TYPE_UNSPECIFIED = 0;
+    PACKAGE_TYPE_FREE = 1;
+    PACKAGE_TYPE_POLLER = 2;
+    PACKAGE_TYPE_FULL = 4;
+    PACKAGE_TYPE_ALL_POLLERS = 255;
+}
+
+message ScheduledJobInfo {
+    UuidType id = 1;
+    ScheduledJob scheduled_job = 2;
+    google.protobuf.Timestamp last_execution = 3;
+    google.protobuf.Timestamp next_execution = 4;
+    // Unix timestamp?
+    uint64 timestamp = 5;
+}
+
+message ExecutionEngineInfo {
+    UriType uri = 1;
+    bool enabled = 2;
+}
+
+// [TODO] Find out in which layer should be .proto type converted to appropriate C# type for following types
+message UuidType {
+    string value = 1;
+}
+
+message UriType {
+    string value = 1;
+}
+
+// [TODO] Decide whether to use string or bytes for serialization of XmlElement
+message XmlElementType {
+    string value = 1;
+}
+
+message TimeZoneInfoType {
+    string value = 1;
+}
+
+message JobEngineErrorMessage {
+    string type = 1;
+    optional UuidType JobId = 2;
+}

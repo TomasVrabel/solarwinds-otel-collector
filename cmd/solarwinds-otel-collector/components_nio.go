@@ -31,6 +31,7 @@ import (
 
 	"github.com/solarwinds/solarwinds-otel-collector/exporter/solarwindsexporter"
 	"github.com/solarwinds/solarwinds-otel-collector/extension/solarwindsextension"
+	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension"
 	"github.com/solarwinds/solarwinds-otel-collector/k8s/connectioncheck"
 
 	"go.opentelemetry.io/collector/connector"
@@ -71,6 +72,7 @@ func components() (otelcol.Factories, error) {
 	factories.Extensions, err = extension.MakeFactoryMap(
 		solarwindsextension.NewFactory(),
 		healthcheckextension.NewFactory(),
+		swjobengineextension.NewFactory(),
 		filestorage.NewFactory(),
 	)
 
