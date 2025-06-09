@@ -1,0 +1,59 @@
+receivers:
+  nop:
+
+  swojobengine:
+    endpointPort: 18733
+
+processors:
+  batch:
+
+  metricsgeneration/calculate_metrics:
+    rules:        
+      - name: "sw.collector.CPULoad.AvgPercentMemoryUsed"
+        type: calculate
+        metric1: "sw.collector.CPULoad.AvgMemoryUsed"
+        metric2: "sw.collector.CPULoad.TotalMemory"
+        operation: percent
+
+exporters:
+  debug:
+    verbosity: detailed
+
+  file:
+    path: ./filename.json
+
+  solarwinds:
+
+
+extensions:
+  swjobengine:
+    job_engine_service_endpoint: "localhost:17733"
+    tls_server_name: "TEDE-6VQTYR2"
+    tls_public_key: "./cert/job-engine-cert.pem"
+    tls_private_key: "./cert/job-engine-key.pem"
+    job_definitions_file_path: "./job_definitions-empty.json"
+    discovery_definitions_file_path: "./discovery_definitions.json"
+    default_job_frequency: 120
+    default_job_initial_wait: 1    
+    endpoint_port: 18734    # for events endpoint to process discovery events
+
+  solarwinds:
+    token: ${env:SWO_TOKEN}
+    data_center: "na-01"
+    collector_name: "vrabel-nio-otel-collector-jev3"
+    endpoint_url_override: "otel.collector.na-01.st-ssp.solarwinds.com:443"
+    
+service:
+  telemetry:
+    logs:
+      level: info
+      development: false
+
+  extensions: [solarwinds, swjobengine]
+
+  pipelines:
+    metrics:
+      receivers: [swojobengine]
+      processors: [batch, metricsgeneration/calculate_metrics]
+      exporters: [solarwinds]
+      #exporters: [debug, file]

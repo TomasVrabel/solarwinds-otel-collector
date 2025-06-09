@@ -590,6 +590,7 @@ require (
 	github.com/snowflakedb/gosnowflake v1.12.0 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/solarwinds/solarwinds-otel-collector/internal/k8sconfig v0.119.5 // indirect
+	github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events v0.0.0-00010101000000-000000000000 // indirect
 	github.com/solarwinds/solarwinds-otel-collector/pkg/testutil v0.119.5 // indirect
 	github.com/solarwindscloud/apm-proto v1.0.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
@@ -739,6 +740,8 @@ replace github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineext
 replace github.com/solarwinds/solarwinds-otel-collector/pkg/testutil => ../../pkg/testutil
 
 replace github.com/solarwinds/solarwinds-otel-collector/pkg/version => ../../pkg/version
+
+replace github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events => ../../pkg/job-engine-events
 
 replace github.com/solarwinds/solarwinds-otel-collector/receiver/swohostmetricsreceiver => ../../receiver/swohostmetricsreceiver
 

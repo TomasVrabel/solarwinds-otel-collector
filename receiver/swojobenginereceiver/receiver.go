@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver/internal/job-engine-events"
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 	model "github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver/internal/model"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componentstatus"

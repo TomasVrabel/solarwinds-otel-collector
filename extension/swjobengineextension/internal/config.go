@@ -23,11 +23,16 @@ import (
 // Config represents a Solarwinds Extension configuration.
 type Config struct {
 	// JobEngineServiceEndpoint is the endpoint for the Job Engine service.
-	JobEngineServiceEndpoint string `mapstructure:"job_engine_service_endpoint"`
-	TLS_ServerNamme          string `mapstructure:"tls_server_name"`
-	TLS_PublicKey            string `mapstructure:"tls_public_key"`
-	TLS_PrivateKey           string `mapstructure:"tls_private_key"`
-	JobDefinitionsFilePath   string `mapstructure:"job_definitions_file_path"`
+	JobEngineServiceEndpoint     string `mapstructure:"job_engine_service_endpoint"`
+	TLS_ServerNamme              string `mapstructure:"tls_server_name"`
+	TLS_PublicKey                string `mapstructure:"tls_public_key"`
+	TLS_PrivateKey               string `mapstructure:"tls_private_key"`
+	JobDefinitionsFilePath       string `mapstructure:"job_definitions_file_path"`
+	DiscoveryDefinitionsFilePath string `mapstructure:"discovery_definitions_file_path"`
+	DefaultJobFrequency          uint   `mapstructure:"default_job_frequency"`
+	DefaultJobInitialWait        uint   `mapstructure:"default_job_initial_wait"`
+
+	EndpointPort int `mapstructure:"endpoint_port"`
 }
 
 var (
@@ -39,7 +44,10 @@ var (
 // Warning: it doesn't define mandatory `Token` and `DataCenter`
 // fields that need to be explicitly provided.
 func NewDefaultConfig() component.Config {
-	return &Config{}
+	return &Config{
+		DefaultJobFrequency:   120,
+		DefaultJobInitialWait: 1,
+	}
 }
 
 // Validate checks the configuration for its validity.

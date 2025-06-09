@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"embed"
 	"log"
 	"os"
+	"strings"
+	"text/template"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,6 +20,13 @@ import (
 
 	pb "github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal/job_engine_service"
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal/models"
+)
+
+const (
+	RECEIVER_EVENT_ENDPOINT  = "grpc://localhost:18733"
+	EXTENSION_EVENT_ENDPOINT = "grpc://localhost:18734"
+
+	JOB_STATE_EMPTY = ""
 )
 
 func pointerTo[T ~string](s T) *T {
@@ -55,19 +65,21 @@ func CreateGrpcConnection(config *Config, logger *zap.Logger) (conn *grpc.Client
 	return conn, err
 }
 
-func CreateScheduledJobs(jobNamespace string, jobType string, credentialsXml string, jobDescription string) *pb.ScheduledJob {
-	runOnce := false
+func CreateScheduledJobs(jobNamespace string, jobType string, credentialsXml string, jobDescription string, frequency uint, initialWait uint, runOnce bool, notificationAddress string, state string) *pb.ScheduledJob {
+	_runOnce := runOnce
+	_forceUserInitialWait := !runOnce
 	use64Bits := true
 	isCustomDebugLogEnabled := true
 
 	return &pb.ScheduledJob{
-		Frequency:           durationpb.New(time.Second * 120),
-		IsOneShot:           false,
-		InitialWait:         durationpb.New(time.Second * 1),
-		RunOnce:             &runOnce,
-		NotificationAddress: "grpc://localhost:18733",
-		State:               "",
-		CronExpression:      pointerTo("* * * * *"),
+		Frequency:           durationpb.New(time.Second * time.Duration(frequency)),
+		IsOneShot:           _runOnce,
+		InitialWait:         durationpb.New(time.Second * time.Duration(initialWait)),
+		RunOnce:             &_runOnce,
+		ForceUseInitialWait: &_forceUserInitialWait,
+		NotificationAddress: notificationAddress,
+		State:               state,
+		CronExpression:      pointerTo(""),
 		TimeZone: &pb.TimeZoneInfoType{
 			Value: "UTC;0;(UTC) Coordinated Universal Time;Coordinated Universal Time;Coordinated Universal Time;;",
 		},
@@ -81,9 +93,9 @@ func CreateScheduledJobs(jobNamespace string, jobType string, credentialsXml str
 			EndpointAddress:         "",
 			LegacyEngine:            pointerTo(""),
 			JobConfiguration:        jobDescription,
-			Timeout:                 durationpb.New(time.Second * 10),
-			HungTimeout:             durationpb.New(time.Second * 10),
-			ResultTtl:               durationpb.New(time.Second * 10),
+			Timeout:                 durationpb.New(time.Minute * 5),
+			HungTimeout:             durationpb.New(time.Second * 30),
+			ResultTtl:               durationpb.New(time.Minute * 5),
 			Credential: &pb.Credential{
 				//CredentialType: "http://www.solarwinds.com/jobengine/2008/03/jobCredential#empty",
 				CredentialType: "http://www.solarwinds.com/orion/2008/03/credentials#pollersjob",
@@ -92,7 +104,7 @@ func CreateScheduledJobs(jobNamespace string, jobType string, credentialsXml str
 				},
 			},
 			SupportedRoles: pb.PackageType_PACKAGE_TYPE_ALL_POLLERS.Enum(),
-			Priority:       pb.JobPriorityType_JOB_PRIORITY_NORMAL.Enum(),
+			Priority:       pb.JobPriorityType_JOB_PRIORITY_HIGH.Enum(),
 			ThrottleGroup:  pointerTo(""),
 			WorkerType:     pb.WorkerType_WORKER_TYPE_NATIVE.Enum(),
 			HostAddress: &pb.HostAddress{
@@ -110,6 +122,7 @@ type JobEngineClient struct {
 	client pb.JobEngineClient
 	ctx    context.Context
 	cancel context.CancelFunc
+	config *Config
 	logger *zap.Logger
 }
 
@@ -133,6 +146,7 @@ func NewGrpcClient(config *Config, logger *zap.Logger) (*JobEngineClient, error)
 		ctx:    ctx,
 		cancel: cancel,
 		logger: logger,
+		config: config,
 	}, nil
 }
 
@@ -141,10 +155,19 @@ func (c *JobEngineClient) Cancel() {
 	c.cancel()
 }
 
+func firstDefinedUint(values ...uint) uint {
+	for _, v := range values {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0 // Default value if all are zero
+}
+
 func (c *JobEngineClient) DeleteJobs() error {
 	// clear jobs
 	_, err := c.client.Clear(c.ctx, &pb.ClearRequest{
-		ProductNamespaces: []string{"SolarWinds.PCU.Pollers", "SolarWinds.Orion.Core.Pollers"},
+		ProductNamespaces: []string{"SolarWinds.PCU.Pollers", "SolarWinds.Orion.Core.Pollers", "orion"},
 	})
 
 	if err != nil {
@@ -176,12 +199,17 @@ func (c *JobEngineClient) ListJobs() (int, error) {
 }
 
 // add job
-func (c *JobEngineClient) CreateJob_PCU(variables map[string]string) (string, error) {
+func (c *JobEngineClient) CreateJob_PCU(poller PollerJob, variables map[string]string) (string, error) {
 	job := CreateScheduledJobs(
 		models.JOB_NAMESPACE_PCU,
 		models.JOB_TYPE_PCU,
 		models.GetSnmpV2Credentials(variables),
-		models.GetPCUJobDescription(variables))
+		models.GetPCUJobDescription(variables),
+		firstDefinedUint(poller.Frequency, c.config.DefaultJobFrequency),
+		firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
+		false,
+		RECEIVER_EVENT_ENDPOINT,
+		JOB_STATE_EMPTY)
 
 	uid, err := c.client.AddJob(c.ctx, job)
 
@@ -193,13 +221,18 @@ func (c *JobEngineClient) CreateJob_PCU(variables map[string]string) (string, er
 	return uid.String(), nil
 }
 
-func (c *JobEngineClient) CreateJob_SNMP(variables map[string]string) (string, error) {
+func (c *JobEngineClient) CreateJob_SNMP(poller PollerJob, variables map[string]string) (string, error) {
 	// add job
 	job := CreateScheduledJobs(
 		models.JOB_NAMESPACE_CPU,
 		models.JOB_TYPE_CPU,
 		models.GetSnmpV2Credentials(variables),
-		models.GetCoreSnmpJobDescription(variables))
+		models.GetCoreSnmpJobDescription(variables),
+		firstDefinedUint(poller.Frequency, c.config.DefaultJobFrequency),
+		firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
+		false,
+		RECEIVER_EVENT_ENDPOINT,
+		JOB_STATE_EMPTY)
 
 	uid, err := c.client.AddJob(c.ctx, job)
 
@@ -211,13 +244,18 @@ func (c *JobEngineClient) CreateJob_SNMP(variables map[string]string) (string, e
 	return uid.String(), nil
 }
 
-func (c *JobEngineClient) CreateJob_ICMP(variables map[string]string) (string, error) {
+func (c *JobEngineClient) CreateJob_ICMP(poller PollerJob, variables map[string]string) (string, error) {
 	// add job
 	job := CreateScheduledJobs(
 		models.JOB_NAMESPACE_CPU,
 		models.JOB_TYPE_CPU,
 		models.GetSnmpV2Credentials(variables),
-		models.GetCoreIcmpJobDescription(variables))
+		models.GetCoreIcmpJobDescription(variables),
+		firstDefinedUint(poller.Frequency, c.config.DefaultJobFrequency),
+		firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
+		false,
+		RECEIVER_EVENT_ENDPOINT,
+		JOB_STATE_EMPTY)
 
 	uid, err := c.client.AddJob(c.ctx, job)
 
@@ -229,13 +267,18 @@ func (c *JobEngineClient) CreateJob_ICMP(variables map[string]string) (string, e
 	return uid.String(), nil
 }
 
-func (c *JobEngineClient) CreateJob_CoreInventory(variables map[string]string) (string, error) {
+func (c *JobEngineClient) CreateJob_CoreInventory(poller PollerJob, variables map[string]string) (string, error) {
 	// add job
 	job := CreateScheduledJobs(
 		models.JOB_NAMESPACE_CPU,
 		models.JOB_TYPE_CPU,
 		models.GetSnmpV2Credentials(variables),
-		models.GetCoreInventoryJobDescription(variables))
+		models.GetCoreInventoryJobDescription(variables),
+		firstDefinedUint(poller.Frequency, c.config.DefaultJobFrequency),
+		firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
+		false,
+		RECEIVER_EVENT_ENDPOINT,
+		JOB_STATE_EMPTY)
 
 	uid, err := c.client.AddJob(c.ctx, job)
 
@@ -245,4 +288,57 @@ func (c *JobEngineClient) CreateJob_CoreInventory(variables map[string]string) (
 	}
 
 	return uid.String(), nil
+}
+
+func (c *JobEngineClient) CreateJob_CoreDiscovery(discoveryJob interface{}) (string, error) {
+	// resolve job description
+	job_description, err := c.ApplyTemplate("discovery_job.xml", discoveryJob)
+	if err != nil {
+		c.logger.Error("could not apply discovery job template", zap.Error(err))
+		panic(err)
+	}
+
+	c.logger.Info(job_description)
+
+	// add discovery job
+	job := CreateScheduledJobs(
+		models.JOB_NAMESPACE_DISCOVERY,
+		models.JOB_TYPE_DISCOVERY,
+		models.GetSnmpV2Credentials(map[string]string{}),
+		job_description,
+		0,
+		0,
+		true,
+		EXTENSION_EVENT_ENDPOINT,
+		"Job_State_Discovery")
+
+	uid, err := c.client.AddJob(c.ctx, job)
+
+	if err != nil {
+		c.logger.Error("could not call CreateJob_Discovery", zap.Error(err))
+		return "", err
+	}
+
+	return uid.String(), nil
+}
+
+// Embed the entire directory.
+//
+//go:embed templates
+var templates embed.FS
+
+func (c *JobEngineClient) ApplyTemplate(name string, model interface{}) (string, error) {
+	tmpl, err := template.ParseFS(templates, "templates/"+name+".tmpl")
+	if err != nil {
+		return "", err
+	}
+
+	var output strings.Builder
+	err = tmpl.Execute(&output, model)
+	if err != nil {
+		return "", err
+	}
+
+	return output.String(), nil
+
 }

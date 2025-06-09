@@ -16,18 +16,35 @@ package swjobengineextension
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/extension"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal"
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 )
 
 type SwJobEngineExtension struct {
 	logger *zap.Logger
 	config *internal.Config
 	client *internal.JobEngineClient
+
+	serverGRPC *grpc.Server
+	server     *server
+}
+
+// server is used to implement Job Engine evetns
+type server struct {
+	extension *SwJobEngineExtension
+	logger    *zap.Logger
+
+	jobEngineEvents.UnimplementedJobEngineEventsServer
 }
 
 func newExtension(ctx context.Context, set extension.Settings, cfg *internal.Config) (*SwJobEngineExtension, error) {
@@ -57,15 +74,43 @@ func (e *SwJobEngineExtension) Start(ctx context.Context, host component.Host) e
 		e.logger.Error("Failed to create gRPC client", zap.Error(err))
 	}
 
+	err = e.startEventEndpoint(ctx, host)
+	if err != nil {
+		e.logger.Error("Failed to start event endpoint", zap.Error(err))
+	}
+
 	e.client = client
 
 	err = e.client.DeleteJobs()
-	e.logger.Info("Deleting all jobs")
+	e.logger.Info("All jobs deleted")
 
+	e.runDiscoveryJobs()
+
+	e.runPollers()
+
+	count, err := e.client.ListJobs()
+	e.logger.Info("Current JobEngine job count", zap.Int("count", count))
+
+	return nil
+}
+
+func (e *SwJobEngineExtension) runPollers() error {
 	job_definitions, err := internal.ReadJobDefinitions(e.config.JobDefinitionsFilePath)
-	e.logger.Info("Job definitions", zap.Int("count", len(job_definitions)))
 
-	var uid string
+	if err != nil {
+		e.logger.Error("Failed to read poller definitions", zap.Error(err))
+	}
+
+	e.logger.Info("Poller definitions", zap.Int("count", len(job_definitions)))
+
+	// Define a map of poller types to their handler functions
+	pollerHandlers := map[string]func(internal.PollerJob, map[string]string) (string, error){
+		"ICMP":          e.client.CreateJob_ICMP,
+		"SNMP":          e.client.CreateJob_SNMP,
+		"PCU":           e.client.CreateJob_PCU,
+		"CoreInventory": e.client.CreateJob_CoreInventory,
+	}
+
 	for _, job_definition := range job_definitions {
 		e.logger.Info("Job Definition", zap.Any("job_definition", job_definition))
 
@@ -74,27 +119,159 @@ func (e *SwJobEngineExtension) Start(ctx context.Context, host component.Host) e
 			variables[variable.Name] = variable.Value
 		}
 
-		if job_definition.PollerType == "ICMP" {
-			uid, err = e.client.CreateJob_ICMP(variables)
-			e.logger.Info("Creating ICMP job", zap.String("uid", uid))
+		// Get the handler for this poller type
+		handler, exists := pollerHandlers[job_definition.PollerType]
+		if !exists {
+			e.logger.Warn("Unknown poller type", zap.String("type", job_definition.PollerType))
+			continue
 		}
-		if job_definition.PollerType == "SNMP" {
-			uid, err = e.client.CreateJob_SNMP(variables)
-			e.logger.Info("Creating SNMP job", zap.String("uid", uid))
+
+		// Create the job
+		uid, err := handler(job_definition, variables)
+		if err != nil {
+			e.logger.Error("Failed to create job",
+				zap.String("type", job_definition.PollerType),
+				zap.Error(err))
+			continue
 		}
-		if job_definition.PollerType == "PCU" {
-			uid, err = e.client.CreateJob_PCU(variables)
-			e.logger.Info("Creating PCU job", zap.String("uid", uid))
+
+		e.logger.Info(fmt.Sprintf("Creating %s job", job_definition.PollerType),
+			zap.String("uid", uid))
+	}
+
+	return nil
+}
+
+func (e *SwJobEngineExtension) runDiscoveryJobs() error {
+	discovery_definitions, err := internal.ReadDiscoveryDefinitions(e.config.DiscoveryDefinitionsFilePath)
+
+	if err != nil {
+		e.logger.Error("Failed to read discovery definitions", zap.Error(err))
+	}
+
+	e.logger.Info("Discovery definitions", zap.Int("count", len(discovery_definitions)))
+
+	// Run discovery jobs
+	for _, discovery_definition := range discovery_definitions {
+		e.logger.Info("Job Definition", zap.Any("discovery_definition", discovery_definition))
+
+		// Create the job
+		uid, err := e.client.CreateJob_CoreDiscovery(discovery_definition)
+		if err != nil {
+			e.logger.Error("Failed to create discovery job",
+				zap.String("name", discovery_definition.Name),
+				zap.Error(err))
+			continue
 		}
-		if job_definition.PollerType == "CoreInventory" {
-			uid, err = e.client.CreateJob_CoreInventory(variables)
-			e.logger.Info("Creating CoreInventory job", zap.String("uid", uid))
+
+		e.logger.Info(fmt.Sprintf("Discovery job created"), zap.String("uid", uid))
+	}
+
+	return nil
+}
+
+func (e *SwJobEngineExtension) startEventEndpoint(ctx context.Context, host component.Host) error {
+	var err error
+
+	e.serverGRPC = grpc.NewServer()
+	if err != nil {
+		return fmt.Errorf("failed create grpc server error: %w", err)
+	}
+
+	e.server = &server{
+		extension: e,
+		logger:    e.logger,
+	}
+
+	jobEngineEvents.RegisterJobEngineEventsServer(e.serverGRPC, e.server)
+
+	err = e.startGRPCServer(ctx, host)
+	if err != nil {
+		return fmt.Errorf("failed to start grpc server error: %w", err)
+	}
+
+	return err
+}
+
+// OnJobFinished implements jobEngineEvents.OnJobFinished
+func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.NotifyJobFinishedRequest) (*jobEngineEvents.NotifyJobFinishedResponse, error) {
+	r.logger.Info("Received job finished notification")
+
+	for _, job := range in.FinishedJobs {
+		r.logger.Info("Job finished",
+			zap.String("scheduled_job_id", job.ScheduledJobId),
+			zap.String("job_id", job.Result.JobId),
+			zap.String("job_state", job.State),
+			zap.String("output", string(job.GetResult().GetOutput())),
+		)
+
+		output := job.GetResult().GetOutput()
+		if len(output) > 0 {
+			// Try to parse as discovery job result
+			discoveryResult, err := internal.ParseDiscoveryJobResult(output)
+			if err != nil {
+				r.logger.Error("Failed to parse discovery job result", zap.Error(err))
+			} else {
+				r.logger.Info("Parsed discovery job result",
+					zap.Int("engineId", discoveryResult.EngineID),
+					zap.Int("profileId", discoveryResult.ProfileID),
+					zap.Int("nodeCount", len(discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.DiscoveredNodes.Nodes)),
+					zap.String("base.pluginTypeName", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.PluginTypeName),
+					zap.String("base.profileId", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.ProfileID),
+					zap.Bool("base.allowCrossEngineNodeUpdates", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.AllowCrossEngineNodeUpdates))
+
+				discoveryPluginResultBase := discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase
+
+				// Log discovered nodes
+				for _, node := range discoveryPluginResultBase.DiscoveredNodes.Nodes {
+					r.logger.Info("Discovered node",
+						zap.Int("id", node.ID),
+						zap.String("ip", node.IP),
+						zap.String("name", node.Name),
+						zap.String("type", node.Type),
+						zap.String("description", node.Description),
+						zap.Int("profileId", node.ProfileID),
+						zap.String("status", node.Status),
+						zap.String("location", node.Location),
+						zap.String("hostname", node.Hostname),
+						zap.String("contact", node.Contact),
+						zap.Bool("isExternal", node.IsExternal),
+						zap.String("oid", node.OID),
+						zap.Bool("isSelected", node.IsSelected),
+						zap.Int("credentialId", node.CredentialID))
+				}
+
+				// Log discovered pollers
+				r.logger.Info("Discovered pollers",
+					zap.Int("count", len(discoveryPluginResultBase.DiscoveredPollers.Pollers)))
+
+				for _, poller := range discoveryPluginResultBase.DiscoveredPollers.Pollers {
+					r.logger.Info("Discovered poller",
+						zap.Int("nodeId", poller.NodeID),
+						zap.String("type", poller.PollerType),
+						zap.String("objectType", poller.ObjectType))
+				}
+			}
+		} else {
+			r.logger.Info("No output for job", zap.String("job_id", job.Result.JobId))
 		}
 	}
 
-	count, err := e.client.ListJobs()
-	e.logger.Info("Current JobEngine job count", zap.Int("count", count))
+	return &jobEngineEvents.NotifyJobFinishedResponse{}, nil
+}
 
+func (r *SwJobEngineExtension) startGRPCServer(ctx context.Context, host component.Host) error {
+	r.logger.Info("Starting GRPC server", zap.Int("endpoint.port", r.config.EndpointPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", r.config.EndpointPort))
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		if errGRPC := r.serverGRPC.Serve(listener); !errors.Is(errGRPC, grpc.ErrServerStopped) && errGRPC != nil {
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errGRPC))
+		}
+	}()
 	return nil
 }
 
@@ -102,6 +279,10 @@ func (e *SwJobEngineExtension) Shutdown(ctx context.Context) error {
 	e.logger.Info("Shutting down SolarWinds JobEngine Extension")
 
 	defer e.client.Cancel()
+
+	if e.serverGRPC != nil {
+		e.serverGRPC.GracefulStop()
+	}
 
 	// Everything must be shut down, regardless of the failure.
 	//return e.heartbeat.Shutdown(ctx)

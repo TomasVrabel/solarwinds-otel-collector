@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver/internal/job-engine-events"
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"

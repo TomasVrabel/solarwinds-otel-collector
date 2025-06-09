@@ -1,10 +1,15 @@
 package models
 
-import "strings"
+import (
+	"strings"
+)
 
 const (
 	JOB_NAMESPACE_CPU = "SolarWinds.Orion.Core.Pollers"
 	JOB_TYPE_CPU      = "SolarWinds.Orion.Core.Pollers.CorePollersJob, SolarWinds.Orion.Core.Pollers, Version=2025.2.0.0, Culture=neutral, PublicKeyToken=null"
+
+	JOB_NAMESPACE_DISCOVERY = "orion"
+	JOB_TYPE_DISCOVERY      = "SolarWinds.Orion.Discovery.Job.OrionDiscoveryJob, SolarWinds.Orion.Discovery.Job, Version=2025.2.0.0, Culture=neutral, PublicKeyToken=null"
 )
 
 const node_inventory_job_description = `
@@ -81,7 +86,7 @@ const snmp_job_description = `
             "Assignment": {
                 "NetObjectType": "N",
                 "NetObjectID": $NetObjectId$,
-                "PollerType": "N.Cpu.SNMP.CiscoGen3",
+                "PollerType": "$CpuPollerType$",
                 "Enabled": true
             },
 			"Settings": {
@@ -93,7 +98,7 @@ const snmp_job_description = `
             "Assignment": {
                 "NetObjectType": "N",
                 "NetObjectID": $NetObjectId$,
-                "PollerType": "N.Memory.SNMP.CiscoGen3",
+                "PollerType": "$MemoryPollerType$",
                 "Enabled": true
             },
             "SettingID": 1
