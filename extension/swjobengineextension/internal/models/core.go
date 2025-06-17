@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	JOB_NAMESPACE_CPU = "SolarWinds.Orion.Core.Pollers"
-	JOB_TYPE_CPU      = "SolarWinds.Orion.Core.Pollers.CorePollersJob, SolarWinds.Orion.Core.Pollers, Version=2025.2.0.0, Culture=neutral, PublicKeyToken=null"
+	JOB_NAMESPACE_CORE = "SolarWinds.Orion.Core.Pollers"
+	JOB_TYPE_CORE      = "SolarWinds.Orion.Core.Pollers.CorePollersJob, SolarWinds.Orion.Core.Pollers, Version=2025.2.0.0, Culture=neutral, PublicKeyToken=null"
 
 	JOB_NAMESPACE_DISCOVERY = "orion"
 	JOB_TYPE_DISCOVERY      = "SolarWinds.Orion.Discovery.Job.OrionDiscoveryJob, SolarWinds.Orion.Discovery.Job, Version=2025.2.0.0, Culture=neutral, PublicKeyToken=null"

@@ -11,6 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type JobResultContext struct {
+	State string
+}
+
 func appendMeasuremnt(metricName string, metricValue string, metricDesc string, value float64, scopeMetrics pmetric.MetricSlice) {
 	rttMetric := scopeMetrics.AppendEmpty()
 	rttMetric.SetName(metricName)
@@ -32,17 +36,17 @@ func formatUri(entityType string, entityId int) string {
 	return entityType + ":" + strconv.Itoa(entityId)
 }
 
-func createTransformFunc[T any](processFunc func(*pmetric.ResourceMetrics, *T, *PollerAssignment) error) func([]byte, *pmetric.ResourceMetrics, *PollerAssignment) error {
-	return func(pollerResultData []byte, rm *pmetric.ResourceMetrics, assignment *PollerAssignment) error {
+func createTransformFunc[T any](processFunc func(*JobResultContext, *pmetric.ResourceMetrics, *T, *PollerAssignment) error) func([]byte, *JobResultContext, *pmetric.ResourceMetrics, *PollerAssignment) error {
+	return func(pollerResultData []byte, context *JobResultContext, rm *pmetric.ResourceMetrics, assignment *PollerAssignment) error {
 		var pollerResult T
 		if err := json.Unmarshal(pollerResultData, &pollerResult); err != nil {
 			return err
 		}
-		return processFunc(rm, &pollerResult, assignment)
+		return processFunc(context, rm, &pollerResult, assignment)
 	}
 }
 
-var transformMap = map[string]func([]byte, *pmetric.ResourceMetrics, *PollerAssignment) error{
+var transformMap = map[string]func([]byte, *JobResultContext, *pmetric.ResourceMetrics, *PollerAssignment) error{
 	"MultiCoreCpuLoadResult":          createTransformFunc(addResult_CPU),
 	"CiscoMemoryResult":               createTransformFunc(addResult_Memory),
 	"NodeDetailsResult":               createTransformFunc(addResult_CoreInventory),
@@ -54,7 +58,12 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 	metrics := pmetric.NewMetrics()
 
 	for _, job := range in.FinishedJobs {
+		var state = job.GetState()
 		var outputStr = job.GetResult().GetOutput()
+
+		var jobResultContext = &JobResultContext{
+			State: state,
+		}
 
 		var root PollerJobOutput
 		err := json.Unmarshal([]byte(outputStr), &root)
@@ -77,7 +86,7 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 				continue
 			}
 
-			err = transformFunction(result.PollerResult, &rm, &result.PollerAssignment)
+			err = transformFunction(result.PollerResult, jobResultContext, &rm, &result.PollerAssignment)
 
 			if err != nil {
 				message := "Error processing PollerResult"

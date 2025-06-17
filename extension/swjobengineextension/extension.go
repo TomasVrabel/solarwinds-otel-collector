@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
+	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componentstatus"
@@ -35,8 +37,14 @@ type SwJobEngineExtension struct {
 	config *internal.Config
 	client *internal.JobEngineClient
 
+	discoveryContext *DiscoveryContext
+
 	serverGRPC *grpc.Server
 	server     *server
+}
+
+type DiscoveryContext struct {
+	credentials map[int]internal.CredentialSnmpV2
 }
 
 // server is used to implement Job Engine evetns
@@ -54,7 +62,11 @@ func newExtension(ctx context.Context, set extension.Settings, cfg *internal.Con
 	e := &SwJobEngineExtension{
 		logger: set.Logger,
 		config: cfg,
+		discoveryContext: &DiscoveryContext{
+			credentials: make(map[int]internal.CredentialSnmpV2),
+		},
 	}
+
 	/*
 		var err error
 		e.heartbeat, err = internal.NewHeartbeat(ctx, set, cfg)
@@ -74,19 +86,25 @@ func (e *SwJobEngineExtension) Start(ctx context.Context, host component.Host) e
 		e.logger.Error("Failed to create gRPC client", zap.Error(err))
 	}
 
+	e.client = client
+
 	err = e.startEventEndpoint(ctx, host)
 	if err != nil {
 		e.logger.Error("Failed to start event endpoint", zap.Error(err))
 	}
-
-	e.client = client
 
 	err = e.client.DeleteJobs()
 	e.logger.Info("All jobs deleted")
 
 	e.runDiscoveryJobs()
 
-	e.runPollers()
+	job_definitions, err := internal.ReadJobDefinitions(e.config.JobDefinitionsFilePath)
+
+	if err != nil {
+		e.logger.Error("Failed to read poller definitions", zap.Error(err))
+	}
+
+	e.createPollers(job_definitions)
 
 	count, err := e.client.ListJobs()
 	e.logger.Info("Current JobEngine job count", zap.Int("count", count))
@@ -94,21 +112,17 @@ func (e *SwJobEngineExtension) Start(ctx context.Context, host component.Host) e
 	return nil
 }
 
-func (e *SwJobEngineExtension) runPollers() error {
-	job_definitions, err := internal.ReadJobDefinitions(e.config.JobDefinitionsFilePath)
+func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJob) error {
 
-	if err != nil {
-		e.logger.Error("Failed to read poller definitions", zap.Error(err))
-	}
+	e.logger.Info("Processing poller definitions", zap.Int("count", len(job_definitions)))
 
-	e.logger.Info("Poller definitions", zap.Int("count", len(job_definitions)))
-
-	// Define a map of poller types to their handler functions
-	pollerHandlers := map[string]func(internal.PollerJob, map[string]string) (string, error){
-		"ICMP":          e.client.CreateJob_ICMP,
-		"SNMP":          e.client.CreateJob_SNMP,
-		"PCU":           e.client.CreateJob_PCU,
-		"CoreInventory": e.client.CreateJob_CoreInventory,
+	// map pollert type to template
+	var jobTemplateMap = map[string]string{
+		"N.Cpu.SNMP.CiscoGen3":                  "core_job_snmp_cpu.json",
+		"N.Memory.SNMP.CiscoAsr":                "core_job_snmp_memory.json",
+		"N.StatusAndResponseTime.ICMP.SendEcho": "core_job_icmp.json",
+		"N.Details.SNMP.Generic":                "core_job_inventory.json",
+		"PCU.Statistics.SNMP.Generic":           "core_job_pcu.json",
 	}
 
 	for _, job_definition := range job_definitions {
@@ -120,14 +134,14 @@ func (e *SwJobEngineExtension) runPollers() error {
 		}
 
 		// Get the handler for this poller type
-		handler, exists := pollerHandlers[job_definition.PollerType]
+		templateId, exists := jobTemplateMap[job_definition.PollerType]
 		if !exists {
 			e.logger.Warn("Unknown poller type", zap.String("type", job_definition.PollerType))
 			continue
 		}
 
 		// Create the job
-		uid, err := handler(job_definition, variables)
+		uid, err := e.client.CreateJob(templateId, job_definition, variables)
 		if err != nil {
 			e.logger.Error("Failed to create job",
 				zap.String("type", job_definition.PollerType),
@@ -154,6 +168,11 @@ func (e *SwJobEngineExtension) runDiscoveryJobs() error {
 	// Run discovery jobs
 	for _, discovery_definition := range discovery_definitions {
 		e.logger.Info("Job Definition", zap.Any("discovery_definition", discovery_definition))
+
+		// Cache credentials
+		for _, credential := range discovery_definition.CredentialSnmpV2 {
+			e.discoveryContext.credentials[credential.Id] = credential
+		}
 
 		// Create the job
 		uid, err := e.client.CreateJob_CoreDiscovery(discovery_definition)
@@ -197,6 +216,9 @@ func (e *SwJobEngineExtension) startEventEndpoint(ctx context.Context, host comp
 func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.NotifyJobFinishedRequest) (*jobEngineEvents.NotifyJobFinishedResponse, error) {
 	r.logger.Info("Received job finished notification")
 
+	var pollerJobs []internal.PollerJob
+	var deviceMap = make(map[int]internal.Node)
+
 	for _, job := range in.FinishedJobs {
 		r.logger.Info("Job finished",
 			zap.String("scheduled_job_id", job.ScheduledJobId),
@@ -239,6 +261,8 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 						zap.String("oid", node.OID),
 						zap.Bool("isSelected", node.IsSelected),
 						zap.Int("credentialId", node.CredentialID))
+
+					deviceMap[node.ID] = node
 				}
 
 				// Log discovered pollers
@@ -250,7 +274,39 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 						zap.Int("nodeId", poller.NodeID),
 						zap.String("type", poller.PollerType),
 						zap.String("objectType", poller.ObjectType))
+
+					node := deviceMap[poller.NodeID]
+
+					credential, exists := r.extension.discoveryContext.credentials[node.CredentialID]
+
+					if !exists {
+						r.logger.Warn("No credential found for node",
+							zap.Int("nodeId", poller.NodeID),
+							zap.Int("credentialId", node.CredentialID))
+						continue
+					}
+
+					pollerJob := internal.PollerJob{
+						ID:         "job-" + poller.PollerType + "-" + strconv.Itoa(poller.NodeID),
+						PollerType: poller.PollerType,
+						Frequency:  r.extension.config.DefaultJobFrequency,
+						Variables: []internal.Variable{
+							{Name: "Community", Value: credential.Community},
+							{Name: "IP", Value: node.IP},
+							{Name: "NetObjectId", Value: strconv.Itoa(node.ID)},
+						},
+					}
+
+					pollerJobs = append(pollerJobs, pollerJob)
 				}
+
+				// creating pollers asychronously
+				go func() {
+					time.Sleep(time.Second * 2) // Delay to ensure all jobs are processed
+					r.extension.createPollers(pollerJobs)
+				}()
+
+				r.logger.Info("Finshed processing discovery job results", zap.String("job_id", job.Result.JobId))
 			}
 		} else {
 			r.logger.Info("No output for job", zap.String("job_id", job.Result.JobId))

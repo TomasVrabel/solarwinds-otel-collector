@@ -6,6 +6,7 @@ import (
 )
 
 type DiscoveryJob struct {
+	Id               string             `json:"id"`
 	Name             string             `json:"name"`
 	IpAddresses      []string           `json:"ipAddresses"`
 	Subnets          []Subnet           `json:"subnets"`

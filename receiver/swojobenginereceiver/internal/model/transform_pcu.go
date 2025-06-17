@@ -27,7 +27,7 @@ type PCUObject struct {
 	Model              string  `json:"Model"`
 }
 
-func addResult_PCU(rm *pmetric.ResourceMetrics, result *PCUPollerResult, assignment *PollerAssignment) error {
+func addResult_PCU(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *PCUPollerResult, assignment *PollerAssignment) error {
 	// Set resource attributes
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.EntityType", "sw.collector.PowerControlUnit")

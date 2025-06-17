@@ -60,7 +60,7 @@ type NodeDetailsPollerResult struct {
 	Outcome     string   `json:"Outcome"`
 }
 
-func addResult_CoreInventory(rm *pmetric.ResourceMetrics, result *NodeDetailsPollerResult, assignment *PollerAssignment) error {
+func addResult_CoreInventory(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *NodeDetailsPollerResult, assignment *PollerAssignment) error {
 	// Set resource attributes
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
@@ -89,7 +89,7 @@ func averageMapValues(data map[string]int) float64 {
 	return float64(sum) / float64(len(data))
 }
 
-func addResult_CPU(rm *pmetric.ResourceMetrics, result *CPUPollerResult, assignment *PollerAssignment) error {
+func addResult_CPU(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *CPUPollerResult, assignment *PollerAssignment) error {
 	// Set resource attributes
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
@@ -103,7 +103,7 @@ func addResult_CPU(rm *pmetric.ResourceMetrics, result *CPUPollerResult, assignm
 	return nil
 }
 
-func addResult_Memory(rm *pmetric.ResourceMetrics, result *MemoryPollerResult, assignment *PollerAssignment) error {
+func addResult_Memory(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *MemoryPollerResult, assignment *PollerAssignment) error {
 
 	// Set resource attributes
 	resource := rm.Resource()
@@ -118,7 +118,7 @@ func addResult_Memory(rm *pmetric.ResourceMetrics, result *MemoryPollerResult, a
 	return nil
 }
 
-func addResult_Echo(rm *pmetric.ResourceMetrics, result *EchoPollerResult, assignment *PollerAssignment) error {
+func addResult_Echo(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *EchoPollerResult, assignment *PollerAssignment) error {
 
 	// Set resource attributes
 	resource := rm.Resource()
