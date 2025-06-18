@@ -41,8 +41,7 @@ func (s *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 	metrics, err := model.Transform_toMetrics(in, s.logger)
 
 	if err != nil {
-		message := "Failed to transform metrics."
-		s.logger.Error(message, zap.Error(err))
+		s.logger.Error("Failed to transform metrics.", zap.Error(err))
 
 		return &jobEngineEvents.NotifyJobFinishedResponse{}, nil
 	}

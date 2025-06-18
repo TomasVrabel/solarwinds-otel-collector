@@ -118,11 +118,16 @@ func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJo
 
 	// map pollert type to template
 	var jobTemplateMap = map[string]string{
-		"N.Cpu.SNMP.CiscoGen3":                  "core_job_snmp_cpu.json",
-		"N.Memory.SNMP.CiscoAsr":                "core_job_snmp_memory.json",
+		"N.Cpu.SNMP.CiscoGen3":        "core_job_snmp_cpu.json",
+		"N.Memory.SNMP.CiscoAsr":      "core_job_snmp_memory.json",
+		"N.Details.SNMP.Generic":      "core_job_inventory.json",
+		"PCU.Statistics.SNMP.Generic": "core_job_pcu.json",
+
 		"N.StatusAndResponseTime.ICMP.SendEcho": "core_job_icmp.json",
-		"N.Details.SNMP.Generic":                "core_job_inventory.json",
-		"PCU.Statistics.SNMP.Generic":           "core_job_pcu.json",
+		"N.ResponseTime.ICMP.Native":            "core_job_icmp.json",
+		"N.Status.ICMP.Native":                  "core_job_icmp.json",
+
+		"N.Uptime.SNMP.Generic": "core_job_snmp_uptime.json",
 	}
 
 	for _, job_definition := range job_definitions {
@@ -223,9 +228,8 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 		r.logger.Info("Job finished",
 			zap.String("scheduled_job_id", job.ScheduledJobId),
 			zap.String("job_id", job.Result.JobId),
-			zap.String("job_state", job.State),
-			zap.String("output", string(job.GetResult().GetOutput())),
-		)
+			//zap.String("output", string(job.GetResult().GetOutput())),
+			zap.String("job_state", job.State))
 
 		output := job.GetResult().GetOutput()
 		if len(output) > 0 {

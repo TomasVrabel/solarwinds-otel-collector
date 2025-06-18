@@ -60,6 +60,12 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 	for _, job := range in.FinishedJobs {
 		var state = job.GetState()
 		var outputStr = job.GetResult().GetOutput()
+		var pollerError = job.GetResult().GetError()
+
+		if pollerError != "" {
+			logger.Warn("Poller job finished with error", zap.String("pollerError", pollerError), zap.String("state", state), zap.String("job_id", job.GetScheduledJobId()))
+			continue
+		}
 
 		var jobResultContext = &JobResultContext{
 			State: state,
@@ -68,10 +74,8 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 		var root PollerJobOutput
 		err := json.Unmarshal([]byte(outputStr), &root)
 		if err != nil {
-			message := "Error deserializing JSON"
-			logger.Error(message, zap.Error(err))
-
-			return nil, err
+			logger.Error("Error deserializing JSON", zap.String("input", string(outputStr)), zap.String("pollerError", pollerError), zap.String("state", state), zap.Error(err))
+			continue
 		}
 
 		for _, result := range root.Results {
@@ -82,7 +86,7 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 
 			if transformFunction == nil {
 				message := "unknown result type"
-				logger.Error(message, zap.String("ResultType", result.ResultType), zap.Error(err))
+				logger.Error(message, zap.String("ResultType", result.ResultType), zap.String("result", string(outputStr)), zap.Error(err))
 				continue
 			}
 

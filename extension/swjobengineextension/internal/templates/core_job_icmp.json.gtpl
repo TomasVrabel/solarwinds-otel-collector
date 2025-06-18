@@ -4,7 +4,7 @@
             "Assignment": {
                 "NetObjectType": "N",
                 "NetObjectID": {{ .NetObjectId }},
-                "PollerType": "{{ .PollerType }}",
+                "PollerType": "N.StatusAndResponseTime.ICMP.SendEcho",
                 "Enabled": true
             },
 			"Settings": {
