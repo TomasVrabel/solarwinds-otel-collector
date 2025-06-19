@@ -30,6 +30,7 @@ import (
 
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal"
 	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
+	job_engine_events "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 )
 
 type SwJobEngineExtension struct {
@@ -290,9 +291,20 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 						continue
 					}
 
+					// create Job State
+					jobState := job_engine_events.NewJobState()
+					jobState[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE] = "networkDevice-" + node.IP
+					jobState[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE] = "1" // Network Device
+					jobStateString, err := jobState.SerializeJobStateToString()
+
+					if err != nil {
+						r.logger.Error("Failed to serialize job state", zap.Error(err))
+					}
+
 					pollerJob := internal.PollerJob{
 						ID:         "job-" + poller.PollerType + "-" + strconv.Itoa(poller.NodeID),
 						PollerType: poller.PollerType,
+						State:      jobStateString,
 						Frequency:  r.extension.config.DefaultJobFrequency,
 						Variables: []internal.Variable{
 							{Name: "Community", Value: credential.Community},

@@ -12,7 +12,8 @@ import (
 )
 
 type JobResultContext struct {
-	State string
+	StateString string
+	State       jobEngineEvents.PollerJobState
 }
 
 func appendMeasuremnt(metricName string, metricValue string, metricDesc string, value float64, scopeMetrics pmetric.MetricSlice) {
@@ -58,23 +59,31 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 	metrics := pmetric.NewMetrics()
 
 	for _, job := range in.FinishedJobs {
-		var state = job.GetState()
+		var stateString = job.GetState()
 		var outputStr = job.GetResult().GetOutput()
 		var pollerError = job.GetResult().GetError()
 
 		if pollerError != "" {
-			logger.Warn("Poller job finished with error", zap.String("pollerError", pollerError), zap.String("state", state), zap.String("job_id", job.GetScheduledJobId()))
+			logger.Warn("Poller job finished with error", zap.String("pollerError", pollerError), zap.String("state", stateString), zap.String("job_id", job.GetScheduledJobId()))
+			continue
+		}
+
+		state, err := jobEngineEvents.DeserializeJobStateFromString(stateString)
+
+		if err != nil {
+			logger.Error("Error deserializing job state", zap.String("state", stateString), zap.String("job_id", job.GetScheduledJobId()), zap.Error(err))
 			continue
 		}
 
 		var jobResultContext = &JobResultContext{
-			State: state,
+			StateString: stateString,
+			State:       state,
 		}
 
 		var root PollerJobOutput
-		err := json.Unmarshal([]byte(outputStr), &root)
+		err = json.Unmarshal([]byte(outputStr), &root)
 		if err != nil {
-			logger.Error("Error deserializing JSON", zap.String("input", string(outputStr)), zap.String("pollerError", pollerError), zap.String("state", state), zap.Error(err))
+			logger.Error("Error deserializing JSON", zap.String("input", string(outputStr)), zap.String("pollerError", pollerError), zap.String("state", stateString), zap.Error(err))
 			continue
 		}
 
@@ -85,16 +94,14 @@ func Transform_toMetrics(in *jobEngineEvents.NotifyJobFinishedRequest, logger *z
 			transformFunction := transformMap[result.ResultType]
 
 			if transformFunction == nil {
-				message := "unknown result type"
-				logger.Error(message, zap.String("ResultType", result.ResultType), zap.String("result", string(outputStr)), zap.Error(err))
+				logger.Warn("unknown result type", zap.String("ResultType", result.ResultType), zap.String("result", string(outputStr)))
 				continue
 			}
 
 			err = transformFunction(result.PollerResult, jobResultContext, &rm, &result.PollerAssignment)
 
 			if err != nil {
-				message := "Error processing PollerResult"
-				logger.Error(message, zap.String("ResultType", result.ResultType), zap.Error(err))
+				logger.Error("Error processing PollerResult", zap.String("ResultType", result.ResultType), zap.Error(err))
 				continue
 			}
 		}

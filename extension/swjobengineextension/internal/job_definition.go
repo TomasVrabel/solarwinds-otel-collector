@@ -13,6 +13,7 @@ type Variable struct {
 type PollerJob struct {
 	ID          string     `json:"id"`
 	PollerType  string     `json:"pollerType"`
+	State       string     `json:"state"`
 	Frequency   uint       `json:"frequency"`
 	InitialWait uint       `json:"initialWait"`
 	Variables   []Variable `json:"variables"`

@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
@@ -63,8 +64,8 @@ type NodeDetailsPollerResult struct {
 func addResult_CoreInventory(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *NodeDetailsPollerResult, assignment *PollerAssignment) error {
 	// Set resource attributes
 	resource := rm.Resource()
-	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
-	resource.Attributes().PutStr("sw.collector.Nodes.Uri", formatUri("NetworkDevice", assignment.NetObjectID))
+	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
 
 	resource.Attributes().PutStr("sw.collector.Nodes.Location", result.Location)
 	resource.Attributes().PutStr("sw.collector.Nodes.Contact", result.Contact)
@@ -92,8 +93,8 @@ func averageMapValues(data map[string]int) float64 {
 func addResult_CPU(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *CPUPollerResult, assignment *PollerAssignment) error {
 	// Set resource attributes
 	resource := rm.Resource()
-	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
-	resource.Attributes().PutStr("sw.collector.Nodes.Uri", formatUri("NetworkDevice", assignment.NetObjectID))
+	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
 
 	scopeMetrics := rm.ScopeMetrics().AppendEmpty().Metrics()
 
@@ -107,8 +108,8 @@ func addResult_Memory(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result
 
 	// Set resource attributes
 	resource := rm.Resource()
-	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
-	resource.Attributes().PutStr("sw.collector.Nodes.Uri", formatUri("NetworkDevice", assignment.NetObjectID))
+	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
 
 	scopeMetrics := rm.ScopeMetrics().AppendEmpty().Metrics()
 
@@ -122,8 +123,8 @@ func addResult_Echo(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *
 
 	// Set resource attributes
 	resource := rm.Resource()
-	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
-	resource.Attributes().PutStr("sw.collector.Nodes.Uri", formatUri("NetworkDevice", assignment.NetObjectID))
+	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
 
 	scopeMetrics := rm.ScopeMetrics().AppendEmpty().Metrics()
 

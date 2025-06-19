@@ -1,6 +1,7 @@
 package model
 
 import (
+	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
@@ -31,8 +32,8 @@ func addResult_PCU(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *P
 	// Set resource attributes
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.EntityType", "sw.collector.PowerControlUnit")
-	resource.Attributes().PutStr("sw.collector.Nodes.Category", "1")
-	resource.Attributes().PutStr("sw.collector.Nodes.Uri", formatUri("NetworkDevice", assignment.NetObjectID))
+	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
 	resource.Attributes().PutStr("sw.collector.PowerControlUnit.Uri", formatUri("PowerControlUnit", assignment.NetObjectID))
 
 	resource.Attributes().PutInt("sw.collector.PowerControlUnit.BasicBatteryStatus", result.PCUObject.BasicBatteryStatus)

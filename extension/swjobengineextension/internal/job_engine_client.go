@@ -232,7 +232,7 @@ func (c *JobEngineClient) CreateJob(templateName string, poller PollerJob, varia
 		initialWait:         firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
 		runOnce:             false,
 		notificationAddress: RECEIVER_EVENT_ENDPOINT,
-		state:               JOB_STATE_EMPTY})
+		state:               poller.State})
 
 	// Contact the server and print out its response.
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*1)
