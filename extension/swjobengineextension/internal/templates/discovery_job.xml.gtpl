@@ -86,15 +86,15 @@
                     <WmiAuthenticationMode>Default</WmiAuthenticationMode>
                     <WmiAutoCorrectRDNSInconsistencies>false</WmiAutoCorrectRDNSInconsistencies>
                     <WmiRetries>0</WmiRetries>
-                    <WmiRetryInterval>PT60S</WmiRetryInterval>
+                    <WmiRetryInterval>PT4S</WmiRetryInterval>
                     <WmiRootNamespaceOverrideAddresses i:nil="true" xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
                 </a:DiscoveryPluginJobDescriptionBase>
             </DiscoveryPluginJobDescriptions>
             <EngineId>0</EngineId>
             <HopCount>0</HopCount>
-            <IcmpTimeout>PT60S</IcmpTimeout>
-            <MaxThreadsInDetectionPhase>0</MaxThreadsInDetectionPhase>
-            <MaxThreadsInInventoryPhase>0</MaxThreadsInInventoryPhase>
+            <IcmpTimeout>PT4S</IcmpTimeout>
+            <MaxThreadsInDetectionPhase>20</MaxThreadsInDetectionPhase>
+            <MaxThreadsInInventoryPhase>20</MaxThreadsInInventoryPhase>
             <PreferredDnsAddressFamily>0</PreferredDnsAddressFamily>
             <PreferredPollingMethod>SNMP</PreferredPollingMethod>
             <ProfileId i:nil="true"/>
@@ -102,8 +102,8 @@
                 <MaxSnmpReplies>2</MaxSnmpReplies>
                 <PreferredSnmpVersion>SNMP2c</PreferredSnmpVersion>
                 <SnmpPort>161</SnmpPort>
-                <SnmpRetries>2</SnmpRetries>
-                <SnmpTimeout>PT4S</SnmpTimeout>
+                <SnmpRetries>1</SnmpRetries>
+                <SnmpTimeout>PT2S</SnmpTimeout>
             </SnmpConfiguration>
             <TagFilter xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
             <VulnerabilityCheckDisabled>false</VulnerabilityCheckDisabled>

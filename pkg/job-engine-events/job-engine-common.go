@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	JOB_STATE_NODES_CATEGORY_ATTRIBUTE = "sw.collector.Nodes.Category"
-	JOB_STATE_NODES_URI_ATTRIBUTE      = "sw.collector.Nodes.Uri"
+	JOB_STATE_NODES_CATEGORY_ATTRIBUTE       = "sw.collector.Nodes.Category"
+	JOB_STATE_NODES_URI_ATTRIBUTE            = "sw.collector.Nodes.Uri"
+	JOB_STATE_NODES_IP_ADDRESS_ATTRIBUTE     = "sw.collector.Nodes.IPAddress"
+	JOB_STATE_NODES_POLLING_METHOD_ATTRIBUTE = "sw.collector.Nodes.PollingMethod"
 )
 
 // PollerJobState represents a map of string keys and string values

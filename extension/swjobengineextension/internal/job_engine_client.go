@@ -105,7 +105,7 @@ func CreateScheduledJobs(scheduleJobInfo scheduleJobParams) *pb.ScheduledJob {
 			EndpointAddress:         "",
 			LegacyEngine:            pointerTo(""),
 			JobConfiguration:        scheduleJobInfo.jobDescription,
-			Timeout:                 durationpb.New(time.Minute * 5),
+			Timeout:                 durationpb.New(time.Minute * 30),
 			HungTimeout:             durationpb.New(time.Second * 30),
 			ResultTtl:               durationpb.New(time.Minute * 5),
 			Credential: &pb.Credential{

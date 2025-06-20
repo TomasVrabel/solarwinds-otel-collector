@@ -66,6 +66,7 @@ func addResult_CoreInventory(ctx *JobResultContext, rm *pmetric.ResourceMetrics,
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
 	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.IPAddress", ctx.State[jobEngineEvents.JOB_STATE_NODES_IP_ADDRESS_ATTRIBUTE])
 
 	resource.Attributes().PutStr("sw.collector.Nodes.Location", result.Location)
 	resource.Attributes().PutStr("sw.collector.Nodes.Contact", result.Contact)
@@ -125,6 +126,7 @@ func addResult_Echo(ctx *JobResultContext, rm *pmetric.ResourceMetrics, result *
 	resource := rm.Resource()
 	resource.Attributes().PutStr("sw.collector.Nodes.Category", ctx.State[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE])
 	resource.Attributes().PutStr("sw.collector.Nodes.Uri", ctx.State[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE])
+	resource.Attributes().PutStr("sw.collector.Nodes.IPAddress", ctx.State[jobEngineEvents.JOB_STATE_NODES_IP_ADDRESS_ATTRIBUTE])
 
 	scopeMetrics := rm.ScopeMetrics().AppendEmpty().Metrics()
 
