@@ -121,6 +121,7 @@ func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJo
 	var jobTemplateMap = map[string]string{
 		"N.Cpu.SNMP.CiscoGen3":        "core_job_snmp_cpu.json",
 		"N.Memory.SNMP.CiscoAsr":      "core_job_snmp_memory.json",
+		"N.Memory.SNMP.CiscoGen3":     "core_job_snmp_memory.json",
 		"N.Details.SNMP.Generic":      "core_job_inventory.json",
 		"PCU.Statistics.SNMP.Generic": "core_job_pcu.json",
 
@@ -132,7 +133,7 @@ func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJo
 	}
 
 	for _, job_definition := range job_definitions {
-		e.logger.Info("Job Definition", zap.Any("job_definition", job_definition))
+		e.logger.Debug("Job Definition", zap.Any("job_definition", job_definition))
 
 		variables := make(map[string]string)
 		for _, variable := range job_definition.Variables {
@@ -155,7 +156,7 @@ func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJo
 			continue
 		}
 
-		e.logger.Info(fmt.Sprintf("Creating %s job", job_definition.PollerType),
+		e.logger.Debug(fmt.Sprintf("Creating %s job", job_definition.PollerType),
 			zap.String("uid", uid))
 	}
 
@@ -239,7 +240,7 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 			if err != nil {
 				r.logger.Error("Failed to parse discovery job result", zap.Error(err))
 			} else {
-				r.logger.Info("Parsed discovery job result",
+				r.logger.Debug("Parsed discovery job result",
 					zap.Int("engineId", discoveryResult.EngineID),
 					zap.Int("profileId", discoveryResult.ProfileID),
 					zap.Int("nodeCount", len(discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.DiscoveredNodes.Nodes)),
@@ -251,7 +252,7 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 
 				// Log discovered nodes
 				for _, node := range discoveryPluginResultBase.DiscoveredNodes.Nodes {
-					r.logger.Info("Discovered node",
+					r.logger.Debug("Discovered node",
 						zap.Int("id", node.ID),
 						zap.String("ip", node.IP),
 						zap.String("name", node.Name),
@@ -271,11 +272,11 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 				}
 
 				// Log discovered pollers
-				r.logger.Info("Discovered pollers",
+				r.logger.Debug("Discovered pollers",
 					zap.Int("count", len(discoveryPluginResultBase.DiscoveredPollers.Pollers)))
 
 				for _, poller := range discoveryPluginResultBase.DiscoveredPollers.Pollers {
-					r.logger.Info("Discovered poller",
+					r.logger.Debug("Discovered poller",
 						zap.Int("nodeId", poller.NodeID),
 						zap.String("type", poller.PollerType),
 						zap.String("objectType", poller.ObjectType))
@@ -287,14 +288,20 @@ func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.Notify
 					if !exists {
 						r.logger.Warn("No credential found for node",
 							zap.Int("nodeId", poller.NodeID),
-							zap.Int("credentialId", node.CredentialID))
-						continue
+							zap.Int("credentialId", node.CredentialID),
+							zap.String("pollerName", poller.PollerType))
+
+						// ICMP jobs don't need credential, use dummy credential
+						credential = internal.CredentialSnmpV2{
+							Community: "credential-not-available",
+						}
 					}
 
 					// create Job State
 					jobState := job_engine_events.NewJobState()
 					jobState[jobEngineEvents.JOB_STATE_NODES_URI_ATTRIBUTE] = "networkDevice-" + node.IP
 					jobState[jobEngineEvents.JOB_STATE_NODES_CATEGORY_ATTRIBUTE] = "1" // Network Device
+					jobState[jobEngineEvents.JOB_STATE_NODES_IP_ADDRESS_ATTRIBUTE] = node.IP
 					jobStateString, err := jobState.SerializeJobStateToString()
 
 					if err != nil {
