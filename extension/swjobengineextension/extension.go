@@ -129,6 +129,11 @@ func (e *SwJobEngineExtension) createPollers(job_definitions []internal.PollerJo
 		"N.ResponseTime.ICMP.Native":            "core_job_icmp.json",
 		"N.Status.ICMP.Native":                  "core_job_icmp.json",
 
+		"I.Rediscovery.SNMP.IfTable":         "interface_job_snmp.json",
+		"I.StatisticsErrors32.SNMP.IfTable":  "interface_job_snmp.json",
+		"I.StatisticsTraffic.SNMP.Universal": "interface_job_snmp.json",
+		"I.Status.SNMP.IfTable":              "interface_job_snmp.json",
+
 		"N.Uptime.SNMP.Generic": "core_job_snmp_uptime.json",
 	}
 
