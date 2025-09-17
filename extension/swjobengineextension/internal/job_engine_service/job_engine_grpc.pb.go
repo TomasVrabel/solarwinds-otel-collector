@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: job-engine-service.proto
+// source: job_engine.proto
 
 package job_engine_service
 
@@ -57,7 +57,7 @@ type JobEngineClient interface {
 	RemoveJobs(ctx context.Context, in *RemoveJobsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CancelJob(ctx context.Context, in *UuidType, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	EnumerateScheduledJobs(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*EnumerateScheduledJobsResponse, error)
-	GetJobResultStream(ctx context.Context, in *GetJobResultStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[JobResult], error)
+	GetJobResultStream(ctx context.Context, in *GetJobResultStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Chunk], error)
 	DeleteJobResult(ctx context.Context, in *UuidType, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Clear(ctx context.Context, in *ClearRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetPublicKey(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetPublicKeyResponse, error)
@@ -142,13 +142,13 @@ func (c *jobEngineClient) EnumerateScheduledJobs(ctx context.Context, in *emptyp
 	return out, nil
 }
 
-func (c *jobEngineClient) GetJobResultStream(ctx context.Context, in *GetJobResultStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[JobResult], error) {
+func (c *jobEngineClient) GetJobResultStream(ctx context.Context, in *GetJobResultStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Chunk], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &JobEngine_ServiceDesc.Streams[0], JobEngine_GetJobResultStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[GetJobResultStreamRequest, JobResult]{ClientStream: stream}
+	x := &grpc.GenericClientStream[GetJobResultStreamRequest, Chunk]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (c *jobEngineClient) GetJobResultStream(ctx context.Context, in *GetJobResu
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type JobEngine_GetJobResultStreamClient = grpc.ServerStreamingClient[JobResult]
+type JobEngine_GetJobResultStreamClient = grpc.ServerStreamingClient[Chunk]
 
 func (c *jobEngineClient) DeleteJobResult(ctx context.Context, in *UuidType, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -315,7 +315,7 @@ type JobEngineServer interface {
 	RemoveJobs(context.Context, *RemoveJobsRequest) (*emptypb.Empty, error)
 	CancelJob(context.Context, *UuidType) (*emptypb.Empty, error)
 	EnumerateScheduledJobs(context.Context, *emptypb.Empty) (*EnumerateScheduledJobsResponse, error)
-	GetJobResultStream(*GetJobResultStreamRequest, grpc.ServerStreamingServer[JobResult]) error
+	GetJobResultStream(*GetJobResultStreamRequest, grpc.ServerStreamingServer[Chunk]) error
 	DeleteJobResult(context.Context, *UuidType) (*emptypb.Empty, error)
 	Clear(context.Context, *ClearRequest) (*emptypb.Empty, error)
 	GetPublicKey(context.Context, *emptypb.Empty) (*GetPublicKeyResponse, error)
@@ -358,7 +358,7 @@ func (UnimplementedJobEngineServer) CancelJob(context.Context, *UuidType) (*empt
 func (UnimplementedJobEngineServer) EnumerateScheduledJobs(context.Context, *emptypb.Empty) (*EnumerateScheduledJobsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnumerateScheduledJobs not implemented")
 }
-func (UnimplementedJobEngineServer) GetJobResultStream(*GetJobResultStreamRequest, grpc.ServerStreamingServer[JobResult]) error {
+func (UnimplementedJobEngineServer) GetJobResultStream(*GetJobResultStreamRequest, grpc.ServerStreamingServer[Chunk]) error {
 	return status.Errorf(codes.Unimplemented, "method GetJobResultStream not implemented")
 }
 func (UnimplementedJobEngineServer) DeleteJobResult(context.Context, *UuidType) (*emptypb.Empty, error) {
@@ -537,11 +537,11 @@ func _JobEngine_GetJobResultStream_Handler(srv interface{}, stream grpc.ServerSt
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(JobEngineServer).GetJobResultStream(m, &grpc.GenericServerStream[GetJobResultStreamRequest, JobResult]{ServerStream: stream})
+	return srv.(JobEngineServer).GetJobResultStream(m, &grpc.GenericServerStream[GetJobResultStreamRequest, Chunk]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type JobEngine_GetJobResultStreamServer = grpc.ServerStreamingServer[JobResult]
+type JobEngine_GetJobResultStreamServer = grpc.ServerStreamingServer[Chunk]
 
 func _JobEngine_DeleteJobResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UuidType)
@@ -890,5 +890,5 @@ var JobEngine_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "job-engine-service.proto",
+	Metadata: "job_engine.proto",
 }

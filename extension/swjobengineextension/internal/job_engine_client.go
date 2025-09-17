@@ -81,6 +81,7 @@ func CreateScheduledJobs(scheduleJobInfo scheduleJobParams) *pb.ScheduledJob {
 	_runOnce := scheduleJobInfo.runOnce
 	_forceUserInitialWait := !scheduleJobInfo.runOnce
 	use64Bits := true
+	inprocWorkerDisabled := false
 	isCustomDebugLogEnabled := true
 
 	return &pb.ScheduledJob{
@@ -115,10 +116,10 @@ func CreateScheduledJobs(scheduleJobInfo scheduleJobParams) *pb.ScheduledJob {
 					Value: scheduleJobInfo.credentialsXml,
 				},
 			},
-			SupportedRoles: pb.PackageType_PACKAGE_TYPE_ALL_POLLERS.Enum(),
-			Priority:       pb.JobPriorityType_JOB_PRIORITY_HIGH.Enum(),
-			ThrottleGroup:  pointerTo(""),
-			WorkerType:     pb.WorkerType_WORKER_TYPE_NATIVE.Enum(),
+			SupportedRoles:           pb.PackageType_PACKAGE_TYPE_ALL_POLLERS.Enum(),
+			InProcessWorkersDisabled: &inprocWorkerDisabled,
+			ThrottleGroup:            pointerTo(""),
+			WorkerType:               pb.WorkerType_WORKER_TYPE_NATIVE.Enum(),
 			HostAddress: &pb.HostAddress{
 				Address:     "127.0.0.1",
 				AddressType: *pb.AddressType_ADDRESS_TYPE_IPV4.Enum(),

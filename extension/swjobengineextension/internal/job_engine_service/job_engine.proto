@@ -19,7 +19,7 @@ service JobEngine {
     rpc RemoveJobs (RemoveJobsRequest) returns (google.protobuf.Empty) {}
     rpc CancelJob (UuidType) returns (google.protobuf.Empty) {}
     rpc EnumerateScheduledJobs (google.protobuf.Empty) returns (EnumerateScheduledJobsResponse) {}
-    rpc GetJobResultStream (GetJobResultStreamRequest) returns (stream JobResult) {}
+    rpc GetJobResultStream (GetJobResultStreamRequest) returns (stream Chunk) {}
     rpc DeleteJobResult (UuidType) returns (google.protobuf.Empty) {}
 
     rpc Clear (ClearRequest) returns (google.protobuf.Empty) {}
@@ -87,11 +87,6 @@ message GetPublicKeyResponse {
     string public_key = 1;
 }
 
-// [TODO] Find out what type returns GetJobResultStream
-message JobResult {
-    UuidType id = 1;
-}
-
 message ScheduledJob {
     google.protobuf.Duration frequency = 1;
     // Indicates if this job is for single execute (IsOneShot=true) or for schedule
@@ -129,6 +124,35 @@ message ScheduledJob {
     optional google.protobuf.Timestamp end = 12;
 }
 
+message ScheduledJobInfo {
+    UuidType id = 1;
+    ScheduledJob scheduled_job = 2;
+    google.protobuf.Timestamp last_execution = 3;
+    google.protobuf.Timestamp next_execution = 4;
+    // Unix timestamp?
+    uint64 timestamp = 5;
+}
+
+message ExecutionEngineInfo {
+    UriType uri = 1;
+    bool enabled = 2;
+}
+
+
+
+message UriType {
+    string value = 1;
+}
+
+message TimeZoneInfoType {
+    string value = 1;
+}
+
+message JobEngineErrorMessage {
+    string type = 1;
+    optional UuidType JobId = 2;
+}
+
 message JobDescription {
     string job_namespace = 1;
     string job_type = 2;
@@ -138,19 +162,20 @@ message JobDescription {
     Credential credential = 6;
     HostAddress host_address = 7;
     optional string legacy_engine = 8;
-    optional JobPriorityType priority = 9;
-    string job_configuration = 10;
-    bytes compressed_job_configuration = 11;
-    optional bool use_64_bit = 12;
-    optional float job_weight = 13;
-    optional string throttle_group = 14;
-    string endpoint_address = 15;
-    optional WorkerType worker_type = 16;
-    optional string custom_worker_command_line = 17;
-    optional string custom_worker_command_args = 18;
-    optional PackageType supported_roles = 19;
-    optional google.protobuf.Duration hung_timeout = 20;
-    optional bool is_custom_debug_log_enabled = 21;
+    string job_configuration = 9;
+    bytes compressed_job_configuration = 10;
+    optional bool use_64_bit = 11;
+    optional float job_weight = 12;
+    optional string throttle_group = 13;
+    string endpoint_address = 14;
+    optional WorkerType worker_type = 15;
+    optional string custom_worker_command_line = 16;
+    optional string custom_worker_command_args = 17;
+    optional PackageType supported_roles = 18;
+    optional google.protobuf.Duration hung_timeout = 19;
+    optional bool is_custom_debug_log_enabled = 20;
+    optional bool in_process_workers_disabled = 21;
+    optional bool is_real_time = 22;
 }
 
 message Credential {
@@ -172,12 +197,6 @@ enum AddressType {
     ADDRESS_TYPE_IPV6 = 5;
 }
 
-enum JobPriorityType {
-    JOB_PRIORITY_UNSPECIFIED = 0;
-    JOB_PRIORITY_NORMAL = 1;
-    JOB_PRIORITY_HIGH = 2;
-}
-
 enum WorkerType {
     WORKER_TYPE_UNSPECIFIED = 0;
     WORKER_TYPE_NATIVE = 1;
@@ -192,18 +211,24 @@ enum PackageType {
     PACKAGE_TYPE_ALL_POLLERS = 255;
 }
 
-message ScheduledJobInfo {
-    UuidType id = 1;
-    ScheduledJob scheduled_job = 2;
-    google.protobuf.Timestamp last_execution = 3;
-    google.protobuf.Timestamp next_execution = 4;
-    // Unix timestamp?
-    uint64 timestamp = 5;
+// [TODO] Decide whether to use string or bytes for serialization of XmlElement
+message XmlElementType {
+    string value = 1;
 }
 
-message ExecutionEngineInfo {
-    UriType uri = 1;
-    bool enabled = 2;
+message JobResult {
+    UuidType job_id = 1;
+    JobStateType state = 2;
+    bytes output = 3;
+    string error = 4;
+    bool read_only = 5;
+    bool is_result_streamed = 6;
+    string progress = 7;
+    ResultContentType content = 8;
+}
+
+message Chunk {
+    bytes data = 1;
 }
 
 // [TODO] Find out in which layer should be .proto type converted to appropriate C# type for following types
@@ -211,20 +236,21 @@ message UuidType {
     string value = 1;
 }
 
-message UriType {
-    string value = 1;
+enum JobStateType {
+    JOB_STATE_TYPE_UNSPECIFIED = 0;
+    JOB_STATE_TYPE_CREATED = 1;
+    JOB_STATE_TYPE_QUEUED = 2;
+    JOB_STATE_TYPE_RUNNING = 3;
+    JOB_STATE_TYPE_CANCELING = 4;
+    JOB_STATE_TYPE_CANCELED = 5;
+    JOB_STATE_TYPE_FAILED = 6;
+    JOB_STATE_TYPE_FINISHED = 7;
 }
 
-// [TODO] Decide whether to use string or bytes for serialization of XmlElement
-message XmlElementType {
-    string value = 1;
-}
-
-message TimeZoneInfoType {
-    string value = 1;
-}
-
-message JobEngineErrorMessage {
-    string type = 1;
-    optional UuidType JobId = 2;
+enum ResultContentType {
+    RESULT_CONTENT_TYPE_UNSPECIFIED = 0;
+    RESULT_CONTENT_TYPE_HEARTBEAT = 1;
+    RESULT_CONTENT_TYPE_FINAL_RESULT = 2;
+    RESULT_CONTENT_TYPE_PROGRESS = 3;
+    RESULT_CONTENT_TYPE_PARTIAL_RESULT = 4;
 }
