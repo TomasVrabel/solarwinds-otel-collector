@@ -6,9 +6,33 @@
 			<PluginInfos>
 				<DiscoveryPluginInfo>
 					<ModuleName i:nil="true"/>
-					<PluginAssemblyName>SolarWinds.Orion.Core.DiscoveryPlugin</PluginAssemblyName>
-					<PluginTypeName>SolarWinds.Orion.Core.DiscoveryPlugin.CoreDiscoveryPlugin</PluginTypeName>
+					<PluginAssemblyName>SolarWinds.Orion.Core.DiscoveryJobPlugin</PluginAssemblyName>
+					<PluginTypeName>SolarWinds.Orion.Core.DiscoveryJobPlugin.CoreDiscoveryJobPlugin</PluginTypeName>
 					<ProcessingOrder>1</ProcessingOrder>
+					<RootPath i:nil="true"/>
+					<SupportedPollingEngineTypes
+						xmlns:a="http://schemas.datacontract.org/2004/07/SolarWinds.Orion.Core.Models.Discovery">
+						<a:DiscoveryPollingEngineType>Primary</a:DiscoveryPollingEngineType>
+						<a:DiscoveryPollingEngineType>Additional</a:DiscoveryPollingEngineType>
+					</SupportedPollingEngineTypes>
+				</DiscoveryPluginInfo>
+				<DiscoveryPluginInfo>
+					<ModuleName i:nil="true"/>
+					<PluginAssemblyName>SolarWinds.Interfaces.SNMP.DiscoveryJobPlugin</PluginAssemblyName>
+      				<PluginTypeName>SolarWinds.Interfaces.SNMP.DiscoveryJobPlugin.InterfacesSnmpDiscoveryJobPlugin</PluginTypeName>
+					<ProcessingOrder>2</ProcessingOrder>
+      				<RootPath i:nil="true"/>
+					<SupportedPollingEngineTypes
+						xmlns:a="http://schemas.datacontract.org/2004/07/SolarWinds.Orion.Core.Models.Discovery">
+						<a:DiscoveryPollingEngineType>Primary</a:DiscoveryPollingEngineType>
+						<a:DiscoveryPollingEngineType>Additional</a:DiscoveryPollingEngineType>
+					</SupportedPollingEngineTypes>
+				</DiscoveryPluginInfo>
+				<DiscoveryPluginInfo>
+					<ModuleName i:nil="true"/>
+					<PluginAssemblyName>SolarWinds.Interfaces.DiscoveryJobPlugin</PluginAssemblyName>
+					<PluginTypeName>SolarWinds.Interfaces.DiscoveryJobPlugin.InterfacesDiscoveryJobPlugin</PluginTypeName>
+					<ProcessingOrder>3</ProcessingOrder>
 					<RootPath i:nil="true"/>
 					<SupportedPollingEngineTypes
 						xmlns:a="http://schemas.datacontract.org/2004/07/SolarWinds.Orion.Core.Models.Discovery">
@@ -89,6 +113,10 @@
                     <WmiRetryInterval>PT4S</WmiRetryInterval>
                     <WmiRootNamespaceOverrideAddresses i:nil="true" xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
                 </a:DiscoveryPluginJobDescriptionBase>
+				<a:DiscoveryPluginJobDescriptionBase xmlns="http://schemas.solarwinds.com/2008/Interfaces" i:type="InterfacesDiscoveryPluginJobDescription">
+				</a:DiscoveryPluginJobDescriptionBase>
+				<a:DiscoveryPluginJobDescriptionBase xmlns="http://schemas.solarwinds.com/2008/Interfaces.SNMP" i:type="InterfacesSnmpDiscoveryPluginJobDescription">
+				</a:DiscoveryPluginJobDescriptionBase>
             </DiscoveryPluginJobDescriptions>
             <EngineId>0</EngineId>
             <HopCount>0</HopCount>
