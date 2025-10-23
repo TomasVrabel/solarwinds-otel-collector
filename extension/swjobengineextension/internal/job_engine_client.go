@@ -18,13 +18,14 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/google/uuid"
 	pb "github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal/job_engine_service"
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal/models"
 )
 
 const (
-	RECEIVER_EVENT_ENDPOINT  = "grpc://localhost:18733"
-	EXTENSION_EVENT_ENDPOINT = "grpc://localhost:18734"
+	RECEIVER_EVENT_ENDPOINT  = "net.tcp://localhost:18733"
+	EXTENSION_EVENT_ENDPOINT = "net.tcp://localhost:18734"
 
 	JOB_STATE_EMPTY = ""
 )
@@ -224,16 +225,23 @@ func (c *JobEngineClient) CreateJob(templateName string, poller PollerJob, varia
 		c.logger.Error("could not apply PCU job template", zap.Error(err))
 	}
 
+	stateStr, err := JobStateToJSON(poller.State)
+	if err != nil {
+		c.logger.Error("could not convert job state to JSON", zap.Error(err))
+		stateStr = ""
+	}
+
 	job := CreateScheduledJobs(scheduleJobParams{
 		jobNamespace:        models.JOB_NAMESPACE_PCU,
 		jobType:             models.JOB_TYPE_PCU,
 		credentialsXml:      credentialXml,
-		jobDescription:      jd, //models.GetPCUJobDescription(variables),
+		jobDescription:      jd,
 		frequency:           firstDefinedUint(poller.Frequency, c.config.DefaultJobFrequency),
 		initialWait:         firstDefinedUint(poller.InitialWait, c.config.DefaultJobInitialWait),
 		runOnce:             false,
 		notificationAddress: RECEIVER_EVENT_ENDPOINT,
-		state:               poller.State})
+		state:               stateStr,
+	})
 
 	// Contact the server and print out its response.
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*1)
@@ -258,6 +266,20 @@ func (c *JobEngineClient) CreateJob_CoreDiscovery(discoveryJob DiscoveryJob) (st
 
 	c.logger.Info(job_description)
 
+	jobState := JobContext{
+		Type: JobTypeDiscovery,
+		DiscoveryContext: DiscoveryContext{
+			DiscoveryId:    discoveryJob.Id,
+			DiscoveryRunId: uuid.New().String(),
+		},
+	}
+
+	stateStr, err := JobStateToJSON(jobState)
+	if err != nil {
+		c.logger.Error("could not convert job state to JSON", zap.Error(err))
+		stateStr = ""
+	}
+
 	// add discovery job
 	job := CreateScheduledJobs(scheduleJobParams{
 		jobNamespace:        models.JOB_NAMESPACE_DISCOVERY,
@@ -268,7 +290,7 @@ func (c *JobEngineClient) CreateJob_CoreDiscovery(discoveryJob DiscoveryJob) (st
 		initialWait:         0,
 		runOnce:             true,
 		notificationAddress: EXTENSION_EVENT_ENDPOINT,
-		state:               discoveryJob.Id,
+		state:               stateStr,
 	})
 
 	// Contact the server and print out its response.
