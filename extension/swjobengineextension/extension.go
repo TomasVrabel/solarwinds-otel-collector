@@ -16,20 +16,17 @@ package swjobengineextension
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
-	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/extension"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal"
-	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
 	"go.opentelemetry.io/collector/pdata/plog"
 )
 
@@ -44,21 +41,10 @@ type SwJobEngineExtension struct {
 	client *internal.JobEngineClient
 
 	discoveryContext *DiscoveryContext
-
-	serverGRPC *grpc.Server
-	server     *server
 }
 
 type DiscoveryContext struct {
 	credentials map[int]internal.CredentialSnmpV2
-}
-
-// server is used to implement Job Engine evetns
-type server struct {
-	extension *SwJobEngineExtension
-	logger    *zap.Logger
-
-	jobEngineEvents.UnimplementedJobEngineEventsServer
 }
 
 func newExtension(ctx context.Context, set extension.Settings, cfg *internal.Config) (*SwJobEngineExtension, error) {
@@ -93,11 +79,6 @@ func (e *SwJobEngineExtension) Start(ctx context.Context, host component.Host) e
 	}
 
 	e.client = client
-
-	err = e.startEventEndpoint(ctx, host)
-	if err != nil {
-		e.logger.Error("Failed to start event endpoint", zap.Error(err))
-	}
 
 	err = e.client.DeleteJobs()
 	e.logger.Info("All jobs deleted")
@@ -206,183 +187,149 @@ func (e *SwJobEngineExtension) runDiscoveryJobs() error {
 	return nil
 }
 
-func (e *SwJobEngineExtension) startEventEndpoint(ctx context.Context, host component.Host) error {
-	var err error
-
-	e.serverGRPC = grpc.NewServer()
-	if err != nil {
-		return fmt.Errorf("failed create grpc server error: %w", err)
-	}
-
-	e.server = &server{
-		extension: e,
-		logger:    e.logger,
-	}
-
-	jobEngineEvents.RegisterJobEngineEventsServer(e.serverGRPC, e.server)
-
-	err = e.startGRPCServer(ctx, host)
-	if err != nil {
-		return fmt.Errorf("failed to start grpc server error: %w", err)
-	}
-
-	return err
-}
-
-// OnJobFinished implements jobEngineEvents.OnJobFinished
-func (r *server) NotifyJobFinished(_ context.Context, in *jobEngineEvents.NotifyJobFinishedRequest) (*jobEngineEvents.NotifyJobFinishedResponse, error) {
-	r.logger.Info("Received job finished notification")
-
-	var pollerJobs []internal.PollerJob
-	var deviceMap = make(map[int]internal.Node)
-
-	for _, job := range in.FinishedJobs {
-		r.logger.Info("Job finished",
-			zap.String("scheduled_job_id", job.ScheduledJobId),
-			zap.String("job_id", job.Result.JobId),
-			//zap.String("output", string(job.GetResult().GetOutput())),
-			zap.String("job_state", job.State))
-
-		output := job.GetResult().GetOutput()
-		if len(output) > 0 {
-			// Try to parse as discovery job result
-			discoveryResult, err := internal.ParseDiscoveryJobResult(output)
-			if err != nil {
-				r.logger.Error("Failed to parse discovery job result", zap.Error(err))
-			} else {
-				r.logger.Debug("Parsed discovery job result",
-					zap.Int("engineId", discoveryResult.EngineID),
-					zap.Int("profileId", discoveryResult.ProfileID),
-					zap.Int("nodeCount", len(discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.DiscoveredNodes.Nodes)),
-					zap.String("base.pluginTypeName", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.PluginTypeName),
-					zap.String("base.profileId", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.ProfileID),
-					zap.Bool("base.allowCrossEngineNodeUpdates", discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase.AllowCrossEngineNodeUpdates))
-
-				discoveryPluginResultBase := discoveryResult.PluginResults.PluginItem.ArrayOfDiscoveryPluginResultBase.DiscoveryPluginResultBase
-
-				// Log discovered nodes
-				for _, node := range discoveryPluginResultBase.DiscoveredNodes.Nodes {
-					r.logger.Debug("Discovered node",
-						zap.Int("id", node.ID),
-						zap.String("ip", node.IP),
-						zap.String("name", node.Name),
-						zap.String("type", node.Type),
-						zap.String("description", node.Description),
-						zap.Int("profileId", node.ProfileID),
-						zap.String("status", node.Status),
-						zap.String("location", node.Location),
-						zap.String("hostname", node.Hostname),
-						zap.String("contact", node.Contact),
-						zap.Bool("isExternal", node.IsExternal),
-						zap.String("oid", node.OID),
-						zap.Bool("isSelected", node.IsSelected),
-						zap.Int("credentialId", node.CredentialID))
-
-					deviceMap[node.ID] = node
-				}
-
-				// Log discovered pollers
-				r.logger.Debug("Discovered pollers",
-					zap.Int("count", len(discoveryPluginResultBase.DiscoveredPollers.Pollers)))
-
-				for _, poller := range discoveryPluginResultBase.DiscoveredPollers.Pollers {
-					r.logger.Debug("Discovered poller",
-						zap.Int("nodeId", poller.NodeID),
-						zap.String("type", poller.PollerType),
-						zap.String("objectType", poller.ObjectType))
-
-					node := deviceMap[poller.NodeID]
-
-					credential, exists := r.extension.discoveryContext.credentials[node.CredentialID]
-
-					if !exists {
-						r.logger.Warn("No credential found for node",
-							zap.Int("nodeId", poller.NodeID),
-							zap.Int("credentialId", node.CredentialID),
-							zap.String("pollerName", poller.PollerType))
-
-						// ICMP jobs don't need credential, use dummy credential
-						credential = internal.CredentialSnmpV2{
-							Community: "credential-not-available",
-						}
-					}
-
-					// create Job State, TBD: create proper job state
-					jobContext := internal.JobContext{
-						Type: internal.JobTypeOther,
-					}
-
-					if err != nil {
-						r.logger.Error("Failed to serialize job state", zap.Error(err))
-					}
-
-					pollerJob := internal.PollerJob{
-						ID:         "job-" + poller.PollerType + "-" + strconv.Itoa(poller.NodeID),
-						PollerType: poller.PollerType,
-						State:      jobContext,
-						Frequency:  r.extension.config.DefaultJobFrequency,
-						Variables: []internal.Variable{
-							{Name: "Community", Value: credential.Community},
-							{Name: "IP", Value: node.IP},
-							{Name: "NetObjectId", Value: strconv.Itoa(node.ID)},
-						},
-					}
-
-					pollerJobs = append(pollerJobs, pollerJob)
-				}
-
-				// creating pollers asychronously
-				go func() {
-					time.Sleep(time.Second * 2) // Delay to ensure all jobs are processed
-					r.extension.createPollers(pollerJobs)
-				}()
-
-				r.logger.Info("Finshed processing discovery job results", zap.String("job_id", job.Result.JobId))
-			}
-		} else {
-			r.logger.Info("No output for job", zap.String("job_id", job.Result.JobId))
-		}
-	}
-
-	return &jobEngineEvents.NotifyJobFinishedResponse{}, nil
-}
-
-func (r *SwJobEngineExtension) startGRPCServer(ctx context.Context, host component.Host) error {
-	r.logger.Info("Starting GRPC server", zap.Int("endpoint.port", r.config.EndpointPort))
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", r.config.EndpointPort))
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		if errGRPC := r.serverGRPC.Serve(listener); !errors.Is(errGRPC, grpc.ErrServerStopped) && errGRPC != nil {
-			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errGRPC))
-		}
-	}()
-	return nil
-}
-
 // ProcessDiscoveryLog processes a discovery log record received from the discovery processor
 func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
+	var pollerJobs []internal.PollerJob
+
 	e.logger.Info("Received discovery log",
 		zap.String("body", logRecord.Body().AsString()),
 		zap.Any("attributes", logRecord.Attributes().AsRaw()),
-		zap.Time("timestamp", logRecord.Timestamp().AsTime()),
-		zap.String("severity", logRecord.SeverityText()))
+		zap.Time("timestamp", logRecord.Timestamp().AsTime()))
 
-	// TODO: Process the discovery log record
-	// This could involve parsing the log content, extracting relevant information,
-	// and potentially triggering discovery jobs based on the log content
+	logBody := logRecord.Body().AsString()
+
+	// Deserialize JSON body as list of map[string]string
+	var discoveryData []map[string]string
+	if err := json.Unmarshal([]byte(logBody), &discoveryData); err != nil {
+		e.logger.Error("Failed to deserialize discovery log JSON",
+			zap.Error(err),
+			zap.String("logBody", logBody))
+		return
+	}
+
+	e.logger.Info("Successfully deserialized discovery log",
+		zap.Int("itemCount", len(discoveryData)))
+
+	// Process each discovery item
+	for i, item := range discoveryData {
+		e.logger.Debug("Processing discovery item",
+			zap.Int("index", i),
+			zap.Any("item", item))
+
+		// Extract common fields if they exist
+		ip := item["ip"]
+		pollerType := item["pollerType"]
+		credentialIdStr := item["credentialId"]
+
+		credentialId, _ := strconv.Atoi(credentialIdStr)
+
+		credential, credentialExists := e.discoveryContext.credentials[credentialId]
+
+		if !credentialExists {
+			e.logger.Warn("No credential found for node",
+				zap.String("ip", ip),
+				zap.Int("credentialId", credentialId),
+				zap.String("pollerName", pollerType))
+
+			// ICMP jobs don't need credential, use dummy credential
+			credential = internal.CredentialSnmpV2{
+				Community: "credential-not-available",
+			}
+		}
+
+		// for now process only nodes, ignore interfaces
+		if strings.HasPrefix(pollerType, "I.") {
+
+			ifIndex := item["ifIndex"]
+
+			jobContext := internal.JobContext{
+				Type: internal.JobTypePoll,
+				Entity: internal.EntityContext{
+					EntityType: "NetworkInterface",
+					EntityId: map[string]string{
+						"sw.collector.Interfaces.Uri": "cloudId:" + ip + "-" + ifIndex,
+						"sw.collector.Nodes.Category": "1",
+					},
+					EntityAttributes: map[string]string{},
+					Relations: []internal.Relation{
+						internal.Relation{
+							RelationType: "Has",
+							Entity: internal.EntityContext{
+								EntityType: "NetworkDevice",
+								EntityId: map[string]string{
+									"sw.collector.Nodes.Uri":      "cloudId:" + ip,
+									"sw.collector.Nodes.Category": "1",
+								},
+								EntityAttributes: map[string]string{
+									"sw.collector.Nodes.IPAddress": ip,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			pollerJob := internal.PollerJob{
+				ID:         "job-" + pollerType + "-" + ip + "-" + ifIndex,
+				PollerType: pollerType,
+				State:      jobContext,
+				Frequency:  e.config.DefaultJobFrequency,
+				Variables: []internal.Variable{
+					{Name: "Community", Value: credential.Community},
+					{Name: "IP", Value: ip},
+					{Name: "InterfaceIndex", Value: ifIndex},
+					{Name: "NetObjectId", Value: "0"},
+				},
+			}
+
+			pollerJobs = append(pollerJobs, pollerJob)
+
+			continue
+		}
+
+		// create Job State, TBD: create proper job state
+		jobContext := internal.JobContext{
+			Type: internal.JobTypePoll,
+			Entity: internal.EntityContext{
+				EntityType: "NetworkDevice",
+				EntityId: map[string]string{
+					"sw.collector.Nodes.Uri":      "cloudId:" + ip,
+					"sw.collector.Nodes.Category": "1",
+				},
+				EntityAttributes: map[string]string{
+					"sw.collector.Nodes.IPAddress": ip,
+				},
+			},
+		}
+
+		pollerJob := internal.PollerJob{
+			ID:         "job-" + pollerType + "-" + ip,
+			PollerType: pollerType,
+			State:      jobContext,
+			Frequency:  e.config.DefaultJobFrequency,
+			Variables: []internal.Variable{
+				{Name: "Community", Value: credential.Community},
+				{Name: "IP", Value: ip},
+				{Name: "NetObjectId", Value: "0"},
+			},
+		}
+
+		pollerJobs = append(pollerJobs, pollerJob)
+	}
+
+	// creating pollers asychronously
+	go func() {
+		time.Sleep(time.Second * 2) // Delay to ensure all jobs are processed
+		e.createPollers(pollerJobs)
+	}()
+
+	e.logger.Info("Finished processing discovery job results", zap.String("job_id", "111111111111111111111"))
 }
 
 func (e *SwJobEngineExtension) Shutdown(ctx context.Context) error {
 	e.logger.Info("Shutting down SolarWinds JobEngine Extension")
 
 	defer e.client.Cancel()
-
-	if e.serverGRPC != nil {
-		e.serverGRPC.GracefulStop()
-	}
 
 	// Everything must be shut down, regardless of the failure.
 	//return e.heartbeat.Shutdown(ctx)

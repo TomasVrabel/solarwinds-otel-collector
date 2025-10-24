@@ -9,7 +9,7 @@
             },
 			"Settings": {
 				"$type": "SolarWinds.Interfaces.Pollers.InterfacesPollerSetting, SolarWinds.Interfaces.Pollers",
-				"InterfaceIndex": {{ .NetObjectId }},
+				"InterfaceIndex": {{ .InterfaceIndex }},
                 "Allow64BitCounters": true
 			},
             "SettingID": 1
