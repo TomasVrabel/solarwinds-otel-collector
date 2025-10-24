@@ -20,6 +20,8 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/simpleprometheusreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/snmpreceiver"
@@ -33,12 +35,11 @@ import (
 	"github.com/solarwinds/solarwinds-otel-collector/extension/solarwindsextension"
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension"
 	"github.com/solarwinds/solarwinds-otel-collector/k8s/connectioncheck"
+	"github.com/solarwinds/solarwinds-otel-collector/processor/discoveryprocessor"
 
 	"go.opentelemetry.io/collector/connector"
 	"go.opentelemetry.io/collector/connector/forwardconnector"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver"
 	"github.com/solarwinds/solarwinds-otel-collector/receiver/swojobenginereceiver"
 	"go.opentelemetry.io/collector/receiver/nopreceiver"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
@@ -110,6 +111,7 @@ func components() (otelcol.Factories, error) {
 		transformprocessor.NewFactory(),
 		memorylimiterprocessor.NewFactory(),
 		batchprocessor.NewFactory(),
+		discoveryprocessor.NewFactory(),
 	)
 
 	if err != nil {

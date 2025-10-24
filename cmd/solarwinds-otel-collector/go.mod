@@ -592,6 +592,7 @@ require (
 	github.com/solarwinds/solarwinds-otel-collector/internal/k8sconfig v0.119.5 // indirect
 	github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events v0.0.0-00010101000000-000000000000 // indirect
 	github.com/solarwinds/solarwinds-otel-collector/pkg/testutil v0.119.5 // indirect
+	github.com/solarwinds/solarwinds-otel-collector/processor/discoveryprocessor v0.0.0-00010101000000-000000000000 // indirect
 	github.com/solarwindscloud/apm-proto v1.0.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
@@ -736,6 +737,8 @@ replace github.com/solarwinds/solarwinds-otel-collector/exporter/solarwindsexpor
 replace github.com/solarwinds/solarwinds-otel-collector/extension/solarwindsextension => ../../extension/solarwindsextension
 
 replace github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension => ../../extension/swjobengineextension
+
+replace github.com/solarwinds/solarwinds-otel-collector/processor/discoveryprocessor => ../../processor/discoveryprocessor
 
 replace github.com/solarwinds/solarwinds-otel-collector/pkg/testutil => ../../pkg/testutil
 

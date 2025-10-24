@@ -81,7 +81,7 @@ func ReadJobDefinitions(filePath string) ([]PollerJob, error) {
 func JobStateToJSON(jc JobContext) (string, error) {
 	data, err := json.MarshalIndent(jc, "", "  ")
 	if err != nil {
-		return nil, err
+		return string(""), err
 	}
 	return string(data), nil
 }

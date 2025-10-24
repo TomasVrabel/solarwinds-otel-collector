@@ -1,0 +1,8 @@
+type: discovery
+github_project: solarwinds/solarwinds-otel-collector
+
+status:
+  class: processor
+  stability:
+    development: [ logs ]
+  distributions: [full, nio]

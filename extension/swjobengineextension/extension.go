@@ -30,7 +30,13 @@ import (
 
 	"github.com/solarwinds/solarwinds-otel-collector/extension/swjobengineextension/internal"
 	jobEngineEvents "github.com/solarwinds/solarwinds-otel-collector/pkg/job-engine-events"
+	"go.opentelemetry.io/collector/pdata/plog"
 )
+
+// DiscoveryLogReceiver defines the interface for components that can receive discovery logs
+type DiscoveryLogReceiver interface {
+	ProcessDiscoveryLog(logRecord plog.LogRecord)
+}
 
 type SwJobEngineExtension struct {
 	logger *zap.Logger
@@ -354,6 +360,19 @@ func (r *SwJobEngineExtension) startGRPCServer(ctx context.Context, host compone
 		}
 	}()
 	return nil
+}
+
+// ProcessDiscoveryLog processes a discovery log record received from the discovery processor
+func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
+	e.logger.Info("Received discovery log",
+		zap.String("body", logRecord.Body().AsString()),
+		zap.Any("attributes", logRecord.Attributes().AsRaw()),
+		zap.Time("timestamp", logRecord.Timestamp().AsTime()),
+		zap.String("severity", logRecord.SeverityText()))
+
+	// TODO: Process the discovery log record
+	// This could involve parsing the log content, extracting relevant information,
+	// and potentially triggering discovery jobs based on the log content
 }
 
 func (e *SwJobEngineExtension) Shutdown(ctx context.Context) error {
