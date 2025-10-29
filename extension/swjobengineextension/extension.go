@@ -247,8 +247,7 @@ func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
 				Entity: internal.EntityContext{
 					EntityType: "NetworkInterface",
 					EntityId: map[string]string{
-						"sw.collector.Interfaces.Uri": "cloudId:" + ip + "-" + ifIndex,
-						"sw.collector.Nodes.Category": "1",
+						"sw.collector.Interfaces.Uri": "cloudId:" + ip + "-interfaceId:" + ifIndex,
 					},
 					EntityAttributes: map[string]string{},
 					Relations: []internal.Relation{
@@ -257,8 +256,7 @@ func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
 							Entity: internal.EntityContext{
 								EntityType: "NetworkDevice",
 								EntityId: map[string]string{
-									"sw.collector.Nodes.Uri":      "cloudId:" + ip,
-									"sw.collector.Nodes.Category": "1",
+									"sw.collector.Nodes.Uri": "cloudId:" + ip,
 								},
 								EntityAttributes: map[string]string{
 									"sw.collector.Nodes.IPAddress": ip,
@@ -293,8 +291,7 @@ func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
 			Entity: internal.EntityContext{
 				EntityType: "NetworkDevice",
 				EntityId: map[string]string{
-					"sw.collector.Nodes.Uri":      "cloudId:" + ip,
-					"sw.collector.Nodes.Category": "1",
+					"sw.collector.Nodes.Uri": "cloudId:" + ip,
 				},
 				EntityAttributes: map[string]string{
 					"sw.collector.Nodes.IPAddress": ip,
@@ -323,7 +320,18 @@ func (e *SwJobEngineExtension) ProcessDiscoveryLog(logRecord plog.LogRecord) {
 		e.createPollers(pollerJobs)
 	}()
 
-	e.logger.Info("Finished processing discovery job results", zap.String("job_id", "111111111111111111111"))
+	e.logger.Info("Finished processing discovery job results", zap.String("job_id", "00000000-0000-0000-0000-000000000000"))
+}
+
+// ProcessDiscoveryLogsBatch processes multiple discovery log records received from the discovery processor
+func (e *SwJobEngineExtension) ProcessDiscoveryLogsBatch(logRecords plog.LogRecordSlice) {
+	e.logger.Info("Received discovery logs batch",
+		zap.Int("logRecordCount", logRecords.Len()))
+
+	// Process each log record in the batch
+	for i := 0; i < logRecords.Len(); i++ {
+		e.ProcessDiscoveryLog(logRecords.At(i))
+	}
 }
 
 func (e *SwJobEngineExtension) Shutdown(ctx context.Context) error {

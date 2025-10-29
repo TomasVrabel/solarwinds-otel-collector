@@ -25,12 +25,13 @@ import (
 )
 
 const (
-	discoveryAttribute = "sw.discovery"
+	discoveryAsLogAttribute = "otel.discovery.discovery_as_log"
 )
 
 // DiscoveryLogReceiver defines the interface for extensions that can receive discovery logs
 type DiscoveryLogReceiver interface {
 	ProcessDiscoveryLog(logRecord plog.LogRecord)
+	ProcessDiscoveryLogsBatch(logRecords plog.LogRecordSlice)
 }
 
 type discoveryProcessor struct {
@@ -55,28 +56,20 @@ func (dp *discoveryProcessor) processLogs(_ context.Context, ld plog.Logs) (plog
 			sl := scopeLogs.At(j)
 			logRecords := sl.LogRecords()
 
-			// Process each log record in reverse order
-			for k := logRecords.Len() - 1; k >= 0; k-- {
-				lr := logRecords.At(k)
+			// Check if scope has discovery_as_log attribute set to true
+			shouldProcessDiscoveryLogs := dp.shouldProcessDiscoveryLogs(sl.Scope().Attributes())
 
-				if dp.isDiscoveryLog(lr.Attributes()) {
-					// Send to job engine extension
-					if dp.jobEngineExtension != nil {
-						dp.jobEngineExtension.ProcessDiscoveryLog(lr)
-						dp.logger.Debug("Processed and removed discovery log from pipeline")
-					} else {
-						dp.logger.Warn("Job engine extension not available for discovery log processing")
-					}
-
-					// Remove the discovery log record
-					logRecords.RemoveIf(func(record plog.LogRecord) bool {
-						return record == lr
-					})
+			if shouldProcessDiscoveryLogs {
+				// Send all log records from this scope as a batch to job engine extension
+				if dp.jobEngineExtension != nil {
+					dp.jobEngineExtension.ProcessDiscoveryLogsBatch(logRecords)
+					dp.logger.Debug("Processed discovery logs batch from scope",
+						zap.Int("logRecordCount", logRecords.Len()))
+				} else {
+					dp.logger.Warn("Job engine extension not available for discovery log processing")
 				}
-			}
 
-			// Remove empty scope logs
-			if sl.LogRecords().Len() == 0 {
+				// Remove the entire scope log since all records were processed
 				scopeLogs.RemoveIf(func(scope plog.ScopeLogs) bool {
 					return scope == sl
 				})
@@ -100,22 +93,19 @@ func (dp *discoveryProcessor) processLogs(_ context.Context, ld plog.Logs) (plog
 	return ld, nil
 }
 
-// isDiscoveryLog checks if a log record has the discovery=true attribute
-func (dp *discoveryProcessor) isDiscoveryLog(attributes pcommon.Map) bool {
-	discoveryValue, exists := attributes.Get(discoveryAttribute)
+// shouldProcessDiscoveryLogs checks if scope has discovery_as_log attribute set to true
+func (dp *discoveryProcessor) shouldProcessDiscoveryLogs(attributes pcommon.Map) bool {
+	discoveryAsLogValue, exists := attributes.Get(discoveryAsLogAttribute)
 	if !exists {
 		return false
 	}
 
-	// Check if the value is true (as boolean or string)
-	switch discoveryValue.Type() {
-	case pcommon.ValueTypeBool:
-		return discoveryValue.Bool()
-	case pcommon.ValueTypeStr:
-		return discoveryValue.Str() == "true"
-	default:
-		return false
+	// Check if the value is true (only boolean values are accepted)
+	if discoveryAsLogValue.Type() == pcommon.ValueTypeBool {
+		return discoveryAsLogValue.Bool()
 	}
+
+	return false
 }
 
 // Start initializes the processor and finds the job engine extension
